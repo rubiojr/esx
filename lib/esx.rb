@@ -13,7 +13,7 @@ module ESX
     #
     # Host connection is insecure by default
     def self.connect(host, user, password, insecure=true)
-      vim = RbVmomi::VIM.connect :host => host, :user => 'root', :password => 'temporal', :insecure => insecure
+      vim = RbVmomi::VIM.connect :host => host, :user => user, :password => password, :insecure => insecure
       host = Host.new
       host.vim = vim
       host
