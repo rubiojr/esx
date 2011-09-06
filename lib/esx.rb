@@ -3,7 +3,7 @@ require 'rbvmomi'
 require 'alchemist'
 
 module ESX
-  VERSION = '0.1'
+  VERSION = '0.1.1'
 
   class Host
 
