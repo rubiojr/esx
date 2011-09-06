@@ -1,27 +1,23 @@
 require 'rubygems'
-require 'bundler'
-begin
-  Bundler.setup(:default, :development)
-rescue Bundler::BundlerError => e
-  $stderr.puts e.message
-  $stderr.puts "Run `bundle install` to install missing gems"
-  exit e.status_code
-end
 require 'rake'
+require 'lib/esx.rb'
 
 require 'jeweler'
 Jeweler::Tasks.new do |gem|
   # gem is a Gem::Specification... see http://docs.rubygems.org/read/chapter/20 for more options
+  gem.version = ESX::VERSION
   gem.name = "esx"
   gem.homepage = "http://github.com/rubiojr/esx"
   gem.license = "MIT"
-  gem.summary = %Q{TODO: one-line summary of your gem}
-  gem.description = %Q{TODO: longer description of your gem}
+  gem.summary = %Q{Simple RbVmomi wrapper library to manage VMWare ESX hosts}
+  gem.description = %Q{Manage VMWare ESX hosts with ease}
   gem.email = "rubiojr@frameos.org"
   gem.authors = ["Sergio Rubio"]
   # Include your dependencies below. Runtime dependencies are required when using your gem,
   # and development dependencies are only needed for development (ie running rake tasks, tests, etc)
-  #  gem.add_runtime_dependency 'jabber4r', '> 0.1'
+  gem.add_runtime_dependency 'alchemist'
+  gem.add_runtime_dependency 'rbvmomi'
+  gem.add_runtime_dependency 'terminal-table'
   #  gem.add_development_dependency 'rspec', '> 1.2.3'
 end
 Jeweler::RubygemsDotOrgTasks.new
@@ -33,19 +29,11 @@ Rake::TestTask.new(:test) do |test|
   test.verbose = true
 end
 
-require 'rcov/rcovtask'
-Rcov::RcovTask.new do |test|
-  test.libs << 'test'
-  test.pattern = 'test/**/test_*.rb'
-  test.verbose = true
-end
+task :default => :build
 
-task :default => :test
-
-require 'rake/rdoctask'
+require 'rdoc/task'
 Rake::RDocTask.new do |rdoc|
-  version = File.exist?('VERSION') ? File.read('VERSION') : ""
-
+  version = ESX::VERSION
   rdoc.rdoc_dir = 'rdoc'
   rdoc.title = "esx #{version}"
   rdoc.rdoc_files.include('README*')
