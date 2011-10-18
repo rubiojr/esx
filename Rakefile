@@ -1,6 +1,6 @@
 require 'rubygems'
 require 'rake'
-require 'lib/esx.rb'
+require './lib/esx.rb'
 
 require 'jeweler'
 Jeweler::Tasks.new do |gem|

@@ -3,7 +3,8 @@ require 'rbvmomi'
 require 'alchemist'
 
 module ESX
-  VERSION = '0.1.1'
+
+  VERSION = '0.2'
 
   class Host
 
@@ -77,6 +78,8 @@ module ESX
     #   :disk_size => 4096,  #(in MB, optional)
     #   :memory => 128, #(in MB, optional)
     #   :datastore => datastore1 #(string, optional)
+    #   :disk_file => path to vmdk inside datastore (optional)
+    #   :disk_type => flat, sparse (default flat)
     # }
     #
     # Default values above.
@@ -98,7 +101,7 @@ module ESX
       vm_cfg = {
         :name => spec[:vm_name],
         :guestId => spec[:guest_id],
-        :files => { :vmPathName => '[datastore1]' },
+        :files => { :vmPathName => spec[:datastore] },
         :numCPUs => spec[:cpus],
         :memoryMB => spec[:memory],
         :deviceChange => [
@@ -108,19 +111,6 @@ module ESX
                              :key => 1000,
                              :busNumber => 0,
                              :sharedBus => :noSharing)
-          },
-          {
-            :operation => :add,
-            :fileOperation => :create,
-            :device => RbVmomi::VIM.VirtualDisk(
-                             :key => 0,
-                             :backing => RbVmomi::VIM.VirtualDiskFlatVer2BackingInfo(
-                                            :fileName => spec[:datastore],
-                                            :diskMode => :persistent,
-                                            :thinProvisioned => true),
-                             :controllerKey => 1000,
-                             :unitNumber => 0,
-                             :capacityInKB => spec[:disk_size])
           },
           {
             :operation => :add,
@@ -143,6 +133,10 @@ module ESX
           }
         ]
       }
+      vm_cfg[:deviceChange].push(create_disk_spec(:disk_file => spec[:disk_file], 
+                                :disk_type => spec[:disk_type],
+                                :disk_size => spec[:disk_size],
+                                :datastore => spec[:datastore]))
       VM.wrap(@_datacenter.vmFolder.CreateVM_Task(:config => vm_cfg, :pool => @_datacenter.hostFolder.children.first.resourcePool).wait_for_completion)
     end
 
@@ -171,6 +165,53 @@ module ESX
       end
       vms
     end
+    
+    private
+    #
+    # disk_file
+    # datastore
+    # disk_size
+    # disk_type
+    #
+    def create_disk_spec(params)
+      disk_type = params[:disk_type] || :flat
+      disk_file = params[:disk_file]
+      if disk_type == :sparse and disk_file.nil?
+        raise Exception.new("Creating sparse disks in ESX is not supported. Use an existing image.")
+      end
+      disk_size = params[:disk_size]
+      datastore = params[:datastore]
+      datastore = datastore + " #{disk_file}" if not disk_file.nil?
+      spec = {}
+      if disk_type == :sparse 
+        spec = {
+          :operation => :add,
+          :device => RbVmomi::VIM.VirtualDisk(
+                           :key => 0,
+                           :backing => RbVmomi::VIM.VirtualDiskSparseVer2BackingInfo(
+                                          :fileName => datastore,
+                                          :diskMode => :persistent),
+                           :controllerKey => 1000,
+                           :unitNumber => 0,
+                           :capacityInKB => disk_size)
+        }
+      else
+        spec = {
+          :operation => :add,
+          :device => RbVmomi::VIM.VirtualDisk(
+                           :key => 0,
+                           :backing => RbVmomi::VIM.VirtualDiskFlatVer2BackingInfo(
+                                          :fileName => datastore,
+                                          :diskMode => :persistent),
+                           :controllerKey => 1000,
+                           :unitNumber => 0,
+                           :capacityInKB => disk_size)
+        }
+      end
+      spec[:fileOperation] = :create if disk_file.nil?
+      spec
+    end
+
 
   end
 
@@ -237,13 +278,15 @@ module ESX
 
     attr_accessor :name, :capacity, :datastore_type, :free_space, :accessible
     attr_accessor :url
+    # Internal use only
+    attr_accessor :_wrapped_object
 
     #
     # Internal method. Do not use
     #
     def self.wrap(ds)
-      @_datastore = ds
       _ds = Datastore.new
+      _ds._wrapped_object = ds
       _ds.name = ds.summary.name
       _ds.capacity = ds.summary.capacity
       _ds.free_space = ds.summary.freeSpace
@@ -251,6 +294,10 @@ module ESX
       _ds.accessible = ds.summary.accessible
       _ds.url = ds.summary.url
       _ds
+    end
+
+    def method_missing(name, *args)
+      @_wrapped_object.send name, *args
     end
   end
 end
