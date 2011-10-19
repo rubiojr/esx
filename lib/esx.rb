@@ -203,6 +203,9 @@ module ESX
     def import_disk(source, destination, print_progress = true)
       tmp_dest = destination + ".tmp"
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        if not (ssh.exec! "ls #{destination} 2>/dev/null").nil?
+          raise Exception.new("Destination file #{destination} already exists")
+        end
         puts "Uploading file... (#{File.basename(source)})"
         ssh.scp.upload!(source, tmp_dest) do |ch, name, sent, total|
           if print_progress
