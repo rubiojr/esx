@@ -2,65 +2,102 @@
 require 'rubygems'
 require 'esx'
 require 'terminal-table/import'
+require 'clamp'
 
-host_addr = ARGV[0]
 
-if host_addr.nil?
-  $stderr.puts 'Usage: esx HOST'
-  exit 1
+class BaseCommand < Clamp::Command
+  parameter "ADDRESS", "ESX host address"
+  option "--user", "USER", "Username", :default => "root"
+  option "--password", "PASSWORD", "Password", :default => ""
 end
 
-print "Username: "
-user = $stdin.gets.strip.chomp
+class InfoCommand < BaseCommand
 
+  parameter "ADDRESS", "ESX host address"
+  option "--user", "USER", "Username", :default => "root"
+  option "--password", "PASSWORD", "Password", :default => ""
 
-system "stty -echo"
-print "Password: "
-pass = $stdin.gets.strip.chomp
-system "stty echo"
-puts
+  def execute
+    begin
 
-begin
+      host = ESX::Host.connect(address, user, password)
 
-  host = ESX::Host.connect(host_addr, user, pass)
+      puts
+      name = host.name.upcase
+      puts "*" * name.size
+      puts name
+      puts "*" * name.size
+      puts "Memory Size:      %s" % host.memory_size.bytes.to.megabytes.to_i
+      puts "Memory Usage:     %s" % host.memory_usage.bytes.to.megabytes.to_i
+      puts "Cpu Cores:        %s" % host.cpu_cores
+      puts "Power State:      %s" % host.power_state
 
-  puts
-  name = host.name.upcase
-  puts "*" * name.size
-  puts name
-  puts "*" * name.size
-  puts "Memory Size:      %s" % host.memory_size.bytes.to.megabytes.to_i
-  puts "Memory Usage:     %s" % host.memory_usage.bytes.to.megabytes.to_i
-  puts "Cpu Cores:        %s" % host.cpu_cores
-  puts "Power State:      %s" % host.power_state
-
-  if not host.virtual_machines.empty?
-    puts "\nVirtual Machines:"
-    user_table = table do |t|
-      t.headings = "NAME","MEMORY","CPUS","NICS","DISKS"
-      host.virtual_machines.each do |vm|
-        t << [vm.name,vm.memory_size.bytes.to.megabytes.to_i, vm.cpus, vm.ethernet_cards_number, vm.virtual_disks_number]
+      if not host.virtual_machines.empty?
+        puts "\nVirtual Machines:"
+        user_table = table do |t|
+          t.headings = "NAME","MEMORY","CPUS","NICS","DISKS"
+          host.virtual_machines.each do |vm|
+            t << [vm.name,vm.memory_size.bytes.to.megabytes.to_i, vm.cpus, vm.ethernet_cards_number, vm.virtual_disks_number]
+          end
+        end
+        puts user_table
       end
-    end
-    puts user_table
-  end
 
-  puts "\nDatastores:"
-  user_table = table do |t|
-      t.headings = "NAME","CAPACITY","FREESPACE","ACCESIBLE","TYPE","URL"
-    host.datastores.each do |ds|
-      dsname = ds.name
-      if dsname.size > 20
-        dsname = dsname[0..19] + '...'
+      puts "\nDatastores:"
+      user_table = table do |t|
+          t.headings = "NAME","CAPACITY","FREESPACE","ACCESIBLE","TYPE","URL"
+        host.datastores.each do |ds|
+          dsname = ds.name
+          if dsname.size > 20
+            dsname = dsname[0..19] + '...'
+          end
+          t << [dsname,ds.capacity, ds.free_space, ds.datastore_type, ds.accessible, ds.url]
+        end
       end
-      t << [dsname,ds.capacity, ds.free_space, ds.datastore_type, ds.accessible, ds.url]
+      puts user_table
+      puts
+
+    rescue Exception => e
+      puts "Error connecting to the ESX host"
+      puts "\n#{e.message}"
+      puts e.backtrace
     end
   end
-  puts user_table
-  puts
-
-rescue Exception => e
-  puts "Error connecting to the ESX host"
-  puts "\n#{e.message}"
-  puts e.backtrace
 end
+
+class CreateVMCommand < BaseCommand
+
+  parameter "ADDRESS", "ESX host address"
+  option "--disk-file", "DISK_FILE", "VMDK file to import", :attribute_name => :disk_file do |f|
+    raise Exception.new("Invalid disk file") if not File.exist?(f)
+    f
+  end
+  option "--name", "VM NAME", "Virtual Machine name (required)"
+  option "--memory", "MEMORY", "VM Memory size in MB", :default => 512
+  option "--datastore", "DATASTORE", "Datastore used to host the disk", :default => "datastore1"
+  option "--poweron", :flag, "Power on the VM after creation"
+
+  def execute
+    if not name
+      $stderr.puts "Invalid VM name."
+      $stderr.puts "Use --name option to specify the VM name"
+      exit 1
+    end
+    host = ESX::Host.connect address, user, password
+    host.import_disk disk_file, "/vmfs/volumes/#{datastore}/#{File.basename(disk_file)}"
+    vm = host.create_vm :vm_name => name, 
+                        :disk_file => "/vmfs/volumes/#{datastore}/#{File.basename(disk_file)}", 
+                        :datastore => datastore, :disk_type => :flat, :memory => vm
+    if poweron?
+      vm.power_on
+    end
+  end
+
+end
+
+class DefaultCommand < Clamp::Command
+  default_subcommand "info", "Display host info", InfoCommand
+  subcommand "create-vm", "Create a VM", CreateVMCommand
+end
+
+DefaultCommand.run
