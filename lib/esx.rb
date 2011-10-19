@@ -190,9 +190,10 @@ module ESX
     #
     def upload_file(source, dest, print_progress = true)
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        puts "Uploading file... (#{File.basename(source)})"
         ssh.scp.upload!(source, dest) do |ch, name, sent, total|
           if print_progress
-            print "\rUploading #{File.basename(name)}: #{(sent.to_f * 100 / total.to_f).to_i}%"
+            print "\rProgress: #{(sent.to_f * 100 / total.to_f).to_i}% completed"
           end
         end
       end
@@ -202,9 +203,10 @@ module ESX
     def import_disk(source, destination, print_progress = true)
       tmp_dest = destination + ".tmp"
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        puts "Uploading file... (#{File.basename(source)})"
         ssh.scp.upload!(source, tmp_dest) do |ch, name, sent, total|
           if print_progress
-            print "\rUploading #{File.basename(name)}: #{(sent.to_f * 100 / total.to_f).to_i}%"
+            print "\rProgress: #{(sent.to_f * 100 / total.to_f).to_i}%"
           end
         end
         if print_progress

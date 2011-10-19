@@ -3,12 +3,14 @@ require 'rubygems'
 require 'esx'
 require 'terminal-table/import'
 require 'clamp'
-
+require 'net/http'
+require 'fileutils'
 
 class BaseCommand < Clamp::Command
   parameter "ADDRESS", "ESX host address"
   option "--user", "USER", "Username", :default => "root"
   option "--password", "PASSWORD", "Password", :default => ""
+  option "--debug", :flag, "Print debugging info"
 end
 
 class InfoCommand < BaseCommand
@@ -68,30 +70,107 @@ end
 class CreateVMCommand < BaseCommand
 
   parameter "ADDRESS", "ESX host address"
-  option "--disk-file", "DISK_FILE", "VMDK file to import", :attribute_name => :disk_file do |f|
-    raise Exception.new("Invalid disk file") if not File.exist?(f)
-    f
-  end
+  option "--disk-file", "DISK_FILE", "VMDK file to import", :attribute_name => :disk_file
+  option "--guest-id", "GUEST_ID", "GuestID value", :attribute_name => :guest_id, :default => 'otherGuest'
   option "--name", "VM NAME", "Virtual Machine name (required)"
   option "--memory", "MEMORY", "VM Memory size in MB", :default => 512
+  option "--tmpdir", "TMP DIR", "tmp dir used to download files", :default => "/tmp"
   option "--datastore", "DATASTORE", "Datastore used to host the disk", :default => "datastore1"
   option "--poweron", :flag, "Power on the VM after creation"
 
   def execute
+    begin
+      host = ESX::Host.connect address, user, password
+    rescue Exception => e
+      $stderr.puts "Can't connect to the host #{address}."
+      if debug?
+        $stderr.puts e.message
+      end
+      exit 1
+    end
+    downloaded_file = nil
+    df = disk_file.dup
+    if df.strip.chomp =~ /^http/
+      begin
+        downloaded_file = disk_file.dup
+        tmpfile = "#{tmpdir}/#{Time.now.to_i}.esx"
+        puts "Downloading file... (#{tmpfile})"
+        download! downloaded_file, tmpfile
+        puts
+        df = tmpfile
+      rescue Exception => e
+        FileUtils.rm_f(tmpfile) 
+        $stderr.puts "Error downloading file from #{downloaded_file}."
+        $stderr.puts e.message if debug?
+        exit 1
+      end
+    end
+    raise Exception.new("Invalid disk file") if not File.exist?(df)
     if not name
       $stderr.puts "Invalid VM name."
       $stderr.puts "Use --name option to specify the VM name"
       exit 1
     end
-    host = ESX::Host.connect address, user, password
     host.remote_command "mkdir /vmfs/volumes/#{datastore}/#{name}"
-    host.import_disk disk_file, "/vmfs/volumes/#{datastore}/#{name}/#{File.basename(disk_file)}"
+    host.import_disk df, "/vmfs/volumes/#{datastore}/#{name}/#{File.basename(df)}"
+    if not downloaded_file.nil?
+      puts "Deleting tmp file #{downloaded_file}"
+      FileUtils.rm_f(df) 
+    end
     vm = host.create_vm :vm_name => name, 
                         :disk_file => "#{name}/#{File.basename(disk_file)}", 
-                        :datastore => datastore, :disk_type => :flat, :memory => vm
+                        :datastore => datastore, :disk_type => :flat, :memory => memory,
+                        :guest_id => guest_id
     if poweron?
       vm.power_on
     end
+  end
+
+  def report_progress(progress, total, show_parts=true)
+    line_reset = "\r\e[0K" 
+    percent = (progress.to_f / total.to_f) * 100
+    line = "Progress: #{percent.to_i}%"
+    line << " (#{progress} / #{total})" if show_parts
+    line = "#{line_reset}#{line}"
+    $stdout.sync = true
+    $stdout.print line
+  end
+
+  def download!(source_url, destination_file)
+    dst = File.open(destination_file, 'w')
+    proxy_uri = URI.parse(ENV["http_proxy"] || "")
+    uri = URI.parse(source_url)
+    http = Net::HTTP.new(uri.host, uri.port, proxy_uri.host, proxy_uri.port, proxy_uri.user, proxy_uri.password)
+
+    if uri.scheme == "https"
+      http.use_ssl = true
+      http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    end
+
+    http.start do |h|
+      h.request_get(uri.request_uri) do |response|
+        total = response.content_length
+        progress = 0
+        segment_count = 0
+
+        response.read_body do |segment|
+          # Report the progress out
+          progress += segment.length
+          segment_count += 1
+
+          # Progress reporting is limited to every 25 segments just so
+          # we're not constantly updating
+          if segment_count % 25 == 0
+            report_progress(progress, total)
+            segment_count = 0
+          end
+          # Store the segment
+          dst.write(segment)
+        end
+      end
+    end
+  ensure
+    dst.close
   end
 
 end
