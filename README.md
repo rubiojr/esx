@@ -12,11 +12,12 @@ If you want a full VMWare vSphere API ruby implementation have a look at https:/
 
 # Usage
 
-ESX ruby library includes a script to print ESX host information.
 
-    Usage: esx my-esx-host-here
+Usage: esx --help
 
-This will ask you for the username and password of the host.
+## Available Commands
+
+_esx info --user root --password foo 10.10.0.2_
 
 Sample output:
 
@@ -43,6 +44,10 @@ Sample output:
     | datastore2 | 146565758976 | 145547591680 | VMFS      | true | /vmfs/volumes/4e611c69-16474ca5-d290-5ef3fc9a99c3 |
     | datastore1 | 141465485312 | 20716716032  | VMFS      | true | /vmfs/volumes/4e6117e7-35c82a3e-ba79-5cf3fc9699c2 |
     +------------+--------------+--------------+-----------+------+---------------------------------------------------+
+
+_esx create-vm --user root --password foo --name esx-rubiojr --disk-file /path/to/file.vmdk --datastore datastore1 --memory 2048 --poweron 10.10.0.2_
+
+
 
 
 # Using the library

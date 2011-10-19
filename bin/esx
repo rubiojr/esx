@@ -112,13 +112,21 @@ class CreateVMCommand < BaseCommand
       exit 1
     end
     host.remote_command "mkdir /vmfs/volumes/#{datastore}/#{name}"
-    host.import_disk df, "/vmfs/volumes/#{datastore}/#{name}/#{File.basename(df)}"
+
+    begin
+      host.import_disk df, "/vmfs/volumes/#{datastore}/#{name}/#{name}.vmdk"
+    rescue Exception => e
+      $stderr.puts "Error uploading file to /vmfs/volumes/#{datastore}/#{name}/#{name}.vmdk"
+      $stderr.puts e.message if debug?
+      exit 1
+    end
+
     if not downloaded_file.nil?
-      puts "Deleting tmp file #{downloaded_file}"
+      puts "Deleting tmp file #{df}" if debug?
       FileUtils.rm_f(df) 
     end
     vm = host.create_vm :vm_name => name, 
-                        :disk_file => "#{name}/#{File.basename(disk_file)}", 
+                        :disk_file => "#{name}/#{name}.vmdk", 
                         :datastore => datastore, :disk_type => :flat, :memory => memory,
                         :guest_id => guest_id
     if poweron?
