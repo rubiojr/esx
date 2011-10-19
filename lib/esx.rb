@@ -176,6 +176,29 @@ module ESX
       vms
     end
 
+    #
+    # Run a command in the ESX host via SSH
+    #
+    def remote_command(cmd)
+      Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        ssh.exec! cmd
+      end
+    end
+
+    #
+    # Upload file
+    #
+    def upload_file(source, dest, print_progress = true)
+      Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        ssh.scp.upload!(source, dest) do |ch, name, sent, total|
+          if print_progress
+            print "\rUploading #{File.basename(name)}: #{(sent.to_f * 100 / total.to_f).to_i}%"
+          end
+        end
+      end
+      puts if print_progress
+    end
+
     def import_disk(source, destination, print_progress = true)
       tmp_dest = destination + ".tmp"
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
