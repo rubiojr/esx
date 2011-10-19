@@ -176,14 +176,20 @@ module ESX
       vms
     end
 
-    def import_disk(source, destination)
+    def import_disk(source, destination, print_progress = true)
       tmp_dest = destination + ".tmp"
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
         ssh.scp.upload!(source, tmp_dest) do |ch, name, sent, total|
-          print "\rUploading #{File.basename(name)}: #{(sent.to_f * 100 / total.to_f).to_i}%"
+          if print_progress
+            print "\rUploading #{File.basename(name)}: #{(sent.to_f * 100 / total.to_f).to_i}%"
+          end
         end
-        puts "\nConverting disk..."
-        ssh.exec "vmkfstools -i #{tmp_dest} --diskformat thin #{destination}; rm -f #{tmp_dest}"
+        if print_progress
+          puts "\nConverting disk..."
+          ssh.exec "vmkfstools -i #{tmp_dest} --diskformat thin #{destination}; rm -f #{tmp_dest}"
+        else
+          ssh.exec "vmkfstools -i #{tmp_dest} --diskformat thin #{destination} >/dev/null 2>&1; rm -f #{tmp_dest}"
+        end
       end
       puts
     end
