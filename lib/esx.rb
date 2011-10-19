@@ -1,12 +1,22 @@
 require 'rubygems'
 require 'rbvmomi'
 require 'alchemist'
+require 'net/scp'
+require 'net/ssh'
 
 module ESX
 
   VERSION = '0.2'
 
   class Host
+
+    attr_reader :address, :user, :password
+
+    def initialize(address, user, password)
+      @address = address
+      @password = password
+      @user = user
+    end
 
     # Connect to a ESX host
     #
@@ -15,7 +25,7 @@ module ESX
     # Host connection is insecure by default
     def self.connect(host, user, password, insecure=true)
       vim = RbVmomi::VIM.connect :host => host, :user => user, :password => password, :insecure => insecure
-      host = Host.new
+      host = Host.new(host, user,password)
       host.vim = vim
       host
     end
@@ -165,6 +175,18 @@ module ESX
       end
       vms
     end
+
+    def import_disk(source, destination)
+      tmp_dest = destination + ".tmp"
+      Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        ssh.scp.upload!(source, tmp_dest) do |ch, name, sent, total|
+          print "\rUploading #{File.basename(name)}: #{(sent.to_f * 100 / total.to_f).to_i}%"
+        end
+        puts "\nConverting disk..."
+        ssh.exec "vmkfstools -i #{tmp_dest} --diskformat thin #{destination}; rm -f #{tmp_dest}"
+      end
+      puts
+    end
     
     private
     #
@@ -211,8 +233,6 @@ module ESX
       spec[:fileOperation] = :create if disk_file.nil?
       spec
     end
-
-
   end
 
   class VM
@@ -299,5 +319,6 @@ module ESX
     def method_missing(name, *args)
       @_wrapped_object.send name, *args
     end
+
   end
 end

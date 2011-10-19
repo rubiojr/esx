@@ -18,6 +18,8 @@ Jeweler::Tasks.new do |gem|
   gem.add_runtime_dependency 'alchemist'
   gem.add_runtime_dependency 'rbvmomi'
   gem.add_runtime_dependency 'terminal-table'
+  gem.add_runtime_dependency 'net-ssh'
+  gem.add_runtime_dependency 'net-scp'
   #  gem.add_development_dependency 'rspec', '> 1.2.3'
 end
 Jeweler::RubygemsDotOrgTasks.new
