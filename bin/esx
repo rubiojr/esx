@@ -33,14 +33,18 @@ begin
   puts "Memory Usage:     %s" % host.memory_usage.bytes.to.megabytes.to_i
   puts "Cpu Cores:        %s" % host.cpu_cores
   puts "Power State:      %s" % host.power_state
-  puts "\nVirtual Machines:"
-  user_table = table do |t|
-    t.headings = "NAME","MEMORY","CPUS","NICS","DISKS"
-    host.virtual_machines.each do |vm|
-      t << [vm.name,vm.memory_size.bytes.to.megabytes.to_i, vm.cpus, vm.ethernet_cards_number, vm.virtual_disks_number]
+
+  if not host.virtual_machines.empty?
+    puts "\nVirtual Machines:"
+    user_table = table do |t|
+      t.headings = "NAME","MEMORY","CPUS","NICS","DISKS"
+      host.virtual_machines.each do |vm|
+        t << [vm.name,vm.memory_size.bytes.to.megabytes.to_i, vm.cpus, vm.ethernet_cards_number, vm.virtual_disks_number]
+      end
     end
+    puts user_table
   end
-  puts user_table
+
   puts "\nDatastores:"
   user_table = table do |t|
       t.headings = "NAME","CAPACITY","FREESPACE","ACCESIBLE","TYPE","URL"
