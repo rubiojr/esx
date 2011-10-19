@@ -178,7 +178,7 @@ class CreateVMCommand < BaseCommand
       end
     end
 
-    raise Exception.new("HTTP Error #{res}") if res != Net::HTTPOK
+    raise Exception.new("HTTP Error #{res}") if res.class != Net::HTTPOK
   ensure
     dst.close
   end
