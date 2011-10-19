@@ -155,7 +155,7 @@ class CreateVMCommand < BaseCommand
       http.verify_mode = OpenSSL::SSL::VERIFY_NONE
     end
 
-    http.start do |h|
+    res = http.start do |h|
       h.request_get(uri.request_uri) do |response|
         total = response.content_length
         progress = 0
@@ -177,6 +177,8 @@ class CreateVMCommand < BaseCommand
         end
       end
     end
+
+    raise Exception.new("HTTP Error #{res}") if res != Net::HTTPOK
   ensure
     dst.close
   end

@@ -47,9 +47,6 @@ Sample output:
 
 _esx create-vm --user root --password foo --name esx-rubiojr --disk-file /path/to/file.vmdk --datastore datastore1 --memory 2048 --poweron 10.10.0.2_
 
-
-
-
 # Using the library
 
     require 'rubygems'
