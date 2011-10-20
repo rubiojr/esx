@@ -29,17 +29,19 @@ class InfoCommand < BaseCommand
       puts "*" * name.size
       puts name
       puts "*" * name.size
-      puts "Memory Size:      %s" % host.memory_size.bytes.to.megabytes.to_i
-      puts "Memory Usage:     %s" % host.memory_usage.bytes.to.megabytes.to_i
+      puts "Memory Size:      %s GB" % host.memory_size.bytes.to.gigabytes.to_f.round
+      puts "Memory Usage:     %s GB" % host.memory_usage.bytes.to.gigabytes.to_f.round
       puts "Cpu Cores:        %s" % host.cpu_cores
       puts "Power State:      %s" % host.power_state
+      puts "Hosted VMs:       %s" % host.virtual_machines.size
+      puts "Running VMs:      %s" % (host.virtual_machines.find_all{ |vm| vm.power_state == 'poweredOn' }).size
 
       if not host.virtual_machines.empty?
         puts "\nVirtual Machines:"
         user_table = table do |t|
-          t.headings = "NAME","MEMORY","CPUS","NICS","DISKS"
+          t.headings = "NAME","MEMORY","CPUS","NICS","DISKS", "STATE"
           host.virtual_machines.each do |vm|
-            t << [vm.name,vm.memory_size.bytes.to.megabytes.to_i, vm.cpus, vm.ethernet_cards_number, vm.virtual_disks_number]
+            t << [vm.name,vm.memory_size.bytes.to.megabytes.to_i, vm.cpus, vm.ethernet_cards_number, vm.virtual_disks_number, vm.power_state]
           end
         end
         puts user_table
@@ -62,7 +64,9 @@ class InfoCommand < BaseCommand
     rescue Exception => e
       puts "Error connecting to the ESX host"
       puts "\n#{e.message}"
-      puts e.backtrace
+      if debug?
+        puts e.backtrace
+      end
     end
   end
 end
