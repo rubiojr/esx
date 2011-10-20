@@ -8,6 +8,18 @@ If you want a full VMWare vSphere API ruby implementation have a look at https:/
 
 # Installation
 
+## Ubuntu/Debian
+  
+  apt-get install libxml2-dev libxslt-dev gcc make rubygems
+  gem install esx
+
+## RHEL/Fedora
+
+  yum install libxml2-devel libxslt-devel make gcc rubygems
+  gem install esx
+
+## MacOSX
+
   gem install esx
 
 # Usage
