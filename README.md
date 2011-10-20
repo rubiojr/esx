@@ -17,7 +17,7 @@ Usage: esx --help
 
 ## Available Commands
 
-_esx info --user root --password foo 10.10.0.2_
+__esx info --user root --password foo 10.10.0.2__
 
 Sample output:
 
@@ -45,7 +45,7 @@ Sample output:
     | datastore1 | 141465485312 | 20716716032  | VMFS      | true | /vmfs/volumes/4e6117e7-35c82a3e-ba79-5cf3fc9699c2 |
     +------------+--------------+--------------+-----------+------+---------------------------------------------------+
 
-_esx create-vm --user root --password foo --name esx-rubiojr --disk-file /path/to/file.vmdk --datastore datastore1 --memory 2048 --poweron 10.10.0.2_
+__esx create-vm --user root --password foo --name esx-rubiojr --disk-file /path/to/file.vmdk --datastore datastore1 --memory 2048 --poweron 10.10.0.2__
 
 # Using the library
 

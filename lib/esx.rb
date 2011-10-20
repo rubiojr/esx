@@ -326,6 +326,69 @@ module ESX
       vm_object.Destroy_Task.wait_for_completion
     end
 
+    def guest_info
+      GuestInfo.wrap(vm_object.guest)
+    end
+
+    #
+    # Shortcut to GuestInfo.ip_address
+    #
+    def ip_address
+      guest_info.ip_address
+    end
+
+  end
+
+  class NetworkInterface
+    
+    attr_accessor :_wrapped_object
+
+    def self.wrap(obj)
+      ni = NetworkInterface.new
+      ni._wrapped_object = obj
+      ni
+    end
+
+    def ip_address
+      _wrapped_object.ipAddress.first
+    end
+
+    def mac
+      _wrapped_object.ipAddress.last
+    end
+
+  end
+
+  class GuestInfo
+
+    attr_accessor :_wrapped_object
+
+    def self.wrap(obj)
+      gi = GuestInfo.new
+      gi._wrapped_object = obj
+      gi
+    end
+
+    def ip_address
+      _wrapped_object.ipAddress
+    end
+    
+    def nics
+      n = []
+      _wrapped_object.net.each do |nic|
+        n << NetworkInterface.wrap(nic)
+      end
+      n
+    end
+
+    def tools_running_status
+      _wrapped_object.toolsRunningStatus
+    end
+
+    def vmware_tools_installed?
+      _wrapped_object.toolsRunningStatus != 'guestToolsNotRunning'
+    end
+
   end
 
   class Datastore
