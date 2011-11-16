@@ -78,6 +78,7 @@ class CreateVMCommand < BaseCommand
   option "--guest-id", "GUEST_ID", "GuestID value", :attribute_name => :guest_id, :default => 'otherGuest'
   option "--name", "VM NAME", "Virtual Machine name (required)"
   option "--memory", "MEMORY", "VM Memory size in MB", :default => 512
+  option "--mac-address", "MAC", "VM Nic1 MAC address", :default => nil
   option "--tmpdir", "TMP DIR", "tmp dir used to download files", :default => "/tmp"
   option "--datastore", "DATASTORE", "Datastore used to host the disk", :default => "datastore1"
   option "--poweron", :flag, "Power on the VM after creation"
@@ -132,7 +133,7 @@ class CreateVMCommand < BaseCommand
     vm = host.create_vm :vm_name => name, 
                         :disk_file => "#{name}/#{name}.vmdk", 
                         :datastore => datastore, :disk_type => :flat, :memory => memory,
-                        :guest_id => guest_id
+                        :guest_id => guest_id, :mac_address => mac_address
     if poweron?
       vm.power_on
     end

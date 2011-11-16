@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.2'
+  VERSION = '0.2.1'
 
   class Host
 
@@ -124,16 +124,7 @@ module ESX
           },
           {
             :operation => :add,
-            :device => RbVmomi::VIM.VirtualE1000(
-              :key => 0,
-              :deviceInfo => {
-                :label => 'Network Adapter 1',
-                :summary => 'VM Network'
-              },
-              :backing => RbVmomi::VIM.VirtualEthernetCardNetworkBackingInfo(
-                :deviceName => 'VM Network'
-              ),
-              :addressType => 'generated')
+            :device => RbVmomi::VIM.VirtualE1000(create_net_dev(specification))
           }
         ],
         :extraConfig => [
@@ -148,6 +139,26 @@ module ESX
                                 :disk_size => spec[:disk_size],
                                 :datastore => spec[:datastore]))
       VM.wrap(@_datacenter.vmFolder.CreateVM_Task(:config => vm_cfg, :pool => @_datacenter.hostFolder.children.first.resourcePool).wait_for_completion)
+    end
+
+    def create_net_dev(spec)
+      h = {
+        :key => 0,
+        :deviceInfo => {
+          :label => 'Network Adapter 1',
+          :summary => 'VM Network'
+        },
+        :backing => RbVmomi::VIM.VirtualEthernetCardNetworkBackingInfo(
+          :deviceName => 'VM Network'
+        )
+      }
+      if spec[:mac_address]
+        h[:macAddress] = spec[:mac_address]
+        h[:addressType] = 'manual'
+      else
+        h[:addressType] = 'generated'
+      end
+      h
     end
 
     # Return product info as an array of strings containing
