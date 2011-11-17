@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.2.1'
+  VERSION = '0.2.2'
 
   class Host
 
@@ -134,10 +134,13 @@ module ESX
           }
         ]
       }
+
+      # VMDK provided, replace the empty vmdk
       vm_cfg[:deviceChange].push(create_disk_spec(:disk_file => spec[:disk_file], 
                                 :disk_type => spec[:disk_type],
                                 :disk_size => spec[:disk_size],
                                 :datastore => spec[:datastore]))
+
       VM.wrap(@_datacenter.vmFolder.CreateVM_Task(:config => vm_cfg, :pool => @_datacenter.hostFolder.children.first.resourcePool).wait_for_completion)
     end
 

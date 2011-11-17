@@ -75,6 +75,7 @@ class CreateVMCommand < BaseCommand
 
   parameter "ADDRESS", "ESX host address"
   option "--disk-file", "DISK_FILE", "VMDK file to import", :attribute_name => :disk_file
+  option "--disk-size", "DISK_SIZE", "VM Disk size", :attribute_name => :disk_size, :default => 8192
   option "--guest-id", "GUEST_ID", "GuestID value", :attribute_name => :guest_id, :default => 'otherGuest'
   option "--name", "VM NAME", "Virtual Machine name (required)"
   option "--memory", "MEMORY", "VM Memory size in MB", :default => 512
@@ -93,47 +94,58 @@ class CreateVMCommand < BaseCommand
       end
       exit 1
     end
+    if disk_size and disk_file
+      $stderr.puts "Both --disk-file and --disk-size specified. --disk-size will be ignored."
+    end
     downloaded_file = nil
-    df = disk_file.dup
-    if df.strip.chomp =~ /^http/
+    if disk_file.nil?
+      # if --disk-file nil? create the VM without disk
+      vm = host.create_vm :vm_name => name, 
+                          :datastore => datastore, :disk_type => :flat, :memory => memory,
+                          :disk_size => disk_size,
+                          :guest_id => guest_id, :mac_address => mac_address
+    else
+      df = disk_file.dup
+      if df.strip.chomp =~ /^http/
+        begin
+          downloaded_file = disk_file.dup
+          tmpfile = "#{tmpdir}/#{Time.now.to_i}.esx"
+          puts "Downloading file... (#{tmpfile})"
+          download! downloaded_file, tmpfile
+          puts
+          df = tmpfile
+        rescue Exception => e
+          FileUtils.rm_f(tmpfile) 
+          $stderr.puts "Error downloading file from #{downloaded_file}."
+          $stderr.puts e.message if debug?
+          exit 1
+        end
+      end
+      raise Exception.new("Invalid disk file") if not File.exist?(df)
+      if not name
+        $stderr.puts "Invalid VM name."
+        $stderr.puts "Use --name option to specify the VM name"
+        exit 1
+      end
+      host.remote_command "mkdir /vmfs/volumes/#{datastore}/#{name}"
+
       begin
-        downloaded_file = disk_file.dup
-        tmpfile = "#{tmpdir}/#{Time.now.to_i}.esx"
-        puts "Downloading file... (#{tmpfile})"
-        download! downloaded_file, tmpfile
-        puts
-        df = tmpfile
+        host.import_disk df, "/vmfs/volumes/#{datastore}/#{name}/#{name}.vmdk"
       rescue Exception => e
-        FileUtils.rm_f(tmpfile) 
-        $stderr.puts "Error downloading file from #{downloaded_file}."
+        $stderr.puts "Error uploading file to /vmfs/volumes/#{datastore}/#{name}/#{name}.vmdk"
         $stderr.puts e.message if debug?
         exit 1
       end
-    end
-    raise Exception.new("Invalid disk file") if not File.exist?(df)
-    if not name
-      $stderr.puts "Invalid VM name."
-      $stderr.puts "Use --name option to specify the VM name"
-      exit 1
-    end
-    host.remote_command "mkdir /vmfs/volumes/#{datastore}/#{name}"
 
-    begin
-      host.import_disk df, "/vmfs/volumes/#{datastore}/#{name}/#{name}.vmdk"
-    rescue Exception => e
-      $stderr.puts "Error uploading file to /vmfs/volumes/#{datastore}/#{name}/#{name}.vmdk"
-      $stderr.puts e.message if debug?
-      exit 1
+      if not downloaded_file.nil?
+        puts "Deleting tmp file #{df}" if debug?
+        FileUtils.rm_f(df) 
+      end
+      vm = host.create_vm :vm_name => name, 
+                          :disk_file => "#{name}/#{name}.vmdk", 
+                          :datastore => datastore, :disk_type => :flat, :memory => memory,
+                          :guest_id => guest_id, :mac_address => mac_address
     end
-
-    if not downloaded_file.nil?
-      puts "Deleting tmp file #{df}" if debug?
-      FileUtils.rm_f(df) 
-    end
-    vm = host.create_vm :vm_name => name, 
-                        :disk_file => "#{name}/#{name}.vmdk", 
-                        :datastore => datastore, :disk_type => :flat, :memory => memory,
-                        :guest_id => guest_id, :mac_address => mac_address
     if poweron?
       vm.power_on
     end
@@ -195,4 +207,12 @@ class DefaultCommand < Clamp::Command
   subcommand "create-vm", "Create a VM", CreateVMCommand
 end
 
-DefaultCommand.run
+begin
+  DefaultCommand.run
+rescue Exception => e
+  puts e.message
+  if $DEBUG
+    puts $!
+    puts $@
+  end
+end
