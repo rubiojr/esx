@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.2.2'
+  VERSION = '0.2.3'
 
   class Host
 
@@ -338,6 +338,10 @@ module ESX
       #  vm_object.ReconfigVM_Task(:spec => spec).wait_for_completion
       #end
       vm_object.Destroy_Task.wait_for_completion
+    end
+
+    def reset
+      vm_object.ResetVM_Task.wait_for_completion
     end
 
     def guest_info

@@ -100,6 +100,10 @@ __esx create-vm --user root --password foo --name esx-rubiojr --disk-file /path/
     
     end
 
+# Testing 
+
+Run rspec from the base dir. By default, the tests try to connect to an ESX host named esx-test-host with user root and no password. Edit spec/spec_helper.rb to fit your needs.
+
 # Copyright
 
 Copyright (c) 2011 Sergio Rubio. See LICENSE.txt for
