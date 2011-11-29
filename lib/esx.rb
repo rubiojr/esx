@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.2.3'
+  VERSION = '0.2.4'
 
   class Host
 
@@ -91,6 +91,9 @@ module ESX
     #   :disk_file => path to vmdk inside datastore (optional)
     #   :disk_type => flat, sparse (default flat)
     # }
+    #
+    # supported guest_id list: 
+    # http://pubs.vmware.com/vsphere-50/index.jsp?topic=/com.vmware.wssdk.apiref.doc_50/vim.vm.GuestOsDescriptor.GuestOsIdentifier.html
     #
     # Default values above.
     def create_vm(specification)
@@ -355,24 +358,40 @@ module ESX
       guest_info.ip_address
     end
 
+    def nics
+      list = []
+      vm_object.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).each do |n|
+        list << NetworkInterface.wrap(n)
+      end
+      list
+    end
+
   end
 
   class NetworkInterface
     
     attr_accessor :_wrapped_object
 
+    # Accepts VirtualEthernetCard and GuestNicInfo objects
     def self.wrap(obj)
       ni = NetworkInterface.new
       ni._wrapped_object = obj
       ni
     end
 
+    # returns nil if the NetworkInterface is of type VirtualEthernetCard
+    # returns the IP address if VMWare tools installed in guest and _wrapped_object is of
+    # type GuestNicInfo
     def ip_address
-      _wrapped_object.ipAddress.first
+      if _wrapped_object.is_a? RbVmomi::VIM::VirtualEthernetCard
+        nil
+      else
+        _wrapped_object.ipAddress.first
+      end
     end
 
     def mac
-      _wrapped_object.ipAddress.last
+      _wrapped_object.macAddress 
     end
 
   end
