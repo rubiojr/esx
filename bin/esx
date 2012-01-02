@@ -80,6 +80,7 @@ class CreateVMCommand < BaseCommand
   option "--name", "VM NAME", "Virtual Machine name (required)"
   option "--memory", "MEMORY", "VM Memory size in MB", :default => 512
   option "--mac-address", "MAC", "VM Nic1 MAC address", :default => nil
+  option "--vm-network", "VM NETWORK", "Network where nic is attached to", :default => 'VM Network'
   option "--tmpdir", "TMP DIR", "tmp dir used to download files", :default => "/tmp"
   option "--datastore", "DATASTORE", "Datastore used to host the disk", :default => "datastore1"
   option "--poweron", :flag, "Power on the VM after creation"
@@ -103,7 +104,7 @@ class CreateVMCommand < BaseCommand
       vm = host.create_vm :vm_name => name, 
                           :datastore => datastore, :disk_type => :flat, :memory => memory,
                           :disk_size => disk_size,
-                          :guest_id => guest_id, :mac_address => mac_address
+                          :guest_id => guest_id, :nics => [{:mac_address => mac_address, :network => vm_network}]
     else
       df = disk_file.dup
       if df.strip.chomp =~ /^http/
