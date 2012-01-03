@@ -225,7 +225,7 @@ class CreateVMCommand < BaseCommand
       vm = host.create_vm :vm_name => name, 
                           :disk_file => "#{name}/#{name}.vmdk", 
                           :datastore => datastore, :disk_type => :flat, :memory => memory,
-                          :guest_id => guest_id, :mac_address => mac_address
+                          :guest_id => guest_id, :nics => [{mac_address => mac_address, :network => vm_network}]
     end
     if poweron?
       vm.power_on
