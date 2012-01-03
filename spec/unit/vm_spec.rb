@@ -21,8 +21,8 @@ describe "ESX Virtual Machine" do
  
   it "should have valid property types" do
     vm = create_simple_vm
-    vm.memory_size.should be_a String
-    vm.memory_size.to_f.should be > 0
+    vm.memory_size.should be_a Fixnum 
+    vm.memory_size.should be > 0
     vm.nics.should be_an Array
     vm.power_state.should be_a String
   end

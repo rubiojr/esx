@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.3'
+  VERSION = '0.3.1'
 
   class Host
 
@@ -71,7 +71,7 @@ module ESX
     # returns a Fixnum
     #
     def memory_usage
-      @_host.summary.quickStats.overallMemoryUsage.megabytes.to.bytes.to_i
+      @_host.summary.quickStats.overallMemoryUsage * 1024 * 1024
     end
 
     
@@ -317,7 +317,7 @@ module ESX
     def self.wrap(vm)
       _vm = VM.new
       _vm.name = vm.name
-      _vm.memory_size = vm.summary.config.memorySizeMB.megabytes.to.bytes.to_s
+      _vm.memory_size = vm.summary.config.memorySizeMB*1024*1024
       _vm.cpus = vm.summary.config.numCpu
       _vm.ethernet_cards_number = vm.summary.config.numEthernetCards 
       _vm.virtual_disks_number = vm.summary.config.numVirtualDisks

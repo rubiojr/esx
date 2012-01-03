@@ -45,7 +45,7 @@ describe "ESX host" do
 
     vm = @test_host.virtual_machines.find { |vm| vm.name == 'test1GB' }
     vm.should_not be_nil
-    vm.memory_size.to_f.round.should eql(512 * 1024 * 1024)
+    vm.memory_size.should eql(512 * 1024 * 1024)
     vm.ethernet_cards_number.should eql(1)
     vm.virtual_disks_number.should eql(1)
   end
@@ -137,5 +137,12 @@ describe "ESX host" do
     vm = @test_host.virtual_machines.find { |vm| vm.name == name }
     vm.nics.first.mac.should eql('00:01:02:03:04:05')
   end 
+  
+  it "should have valid property types" do
+    @test_host.memory_size.should be_a Fixnum 
+    @test_host.memory_size.should be > 0
+    @test_host.memory_usage.should be_a Fixnum 
+    @test_host.memory_usage.should be > 0
+  end
 
 end
