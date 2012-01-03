@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.2.4'
+  VERSION = '0.2.5'
 
   class Host
 
@@ -124,10 +124,6 @@ module ESX
                              :key => 1000,
                              :busNumber => 0,
                              :sharedBus => :noSharing)
-          },
-          {
-            :operation => :add,
-            :device => RbVmomi::VIM.VirtualE1000(create_net_dev(specification))
           }
         ],
         :extraConfig => [
@@ -137,7 +133,21 @@ module ESX
           }
         ]
       }
-
+      
+      #Add multiple nics
+      nics_count = 0
+      if spec[:nics]
+        spec[:nics].each do |nic_spec|
+          vm_cfg[:deviceChange].push(
+            {
+              :operation => :add,
+              :device => RbVmomi::VIM.VirtualE1000(create_net_dev(nics_count, nic_spec))
+              
+            }
+          )
+          nics_count += 1
+        end
+      end
       # VMDK provided, replace the empty vmdk
       vm_cfg[:deviceChange].push(create_disk_spec(:disk_file => spec[:disk_file], 
                                 :disk_type => spec[:disk_type],
@@ -147,17 +157,29 @@ module ESX
       VM.wrap(@_datacenter.vmFolder.CreateVM_Task(:config => vm_cfg, :pool => @_datacenter.hostFolder.children.first.resourcePool).wait_for_completion)
     end
 
-    def create_net_dev(spec)
+    def create_net_dev(nic_id, spec)
       h = {
-        :key => 0,
+        :key => nic_id,
         :deviceInfo => {
-          :label => 'Network Adapter 1',
-          :summary => 'VM Network'
+          :label => "Network Adapter #{nic_id}"
         },
         :backing => RbVmomi::VIM.VirtualEthernetCardNetworkBackingInfo(
-          :deviceName => 'VM Network'
+          :deviceName => spec[:network]
         )
       }
+
+      network = ''
+
+      if spec[:network]
+        network = spec[:network]
+      else
+        network = 'VM Network'
+      end
+      
+      h[:deviceInfo][:summary] = network
+      h[:backing] = RbVmomi::VIM.VirtualEthernetCardNetworkBackingInfo(:deviceName => network)
+
+      
       if spec[:mac_address]
         h[:macAddress] = spec[:mac_address]
         h[:addressType] = 'manual'
