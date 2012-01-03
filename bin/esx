@@ -71,11 +71,91 @@ class InfoCommand < BaseCommand
   end
 end
 
+class DestroyVMCommand < BaseCommand
+
+  parameter "ADDRESS", "ESX host address"
+  option "--vm-name", "VM_NAME", "Virtual Machine to destroy"
+
+  def execute
+    begin
+      host = ESX::Host.connect address, user, password
+      host.virtual_machines.each do |vm|
+        if vm.name == vm_name 
+          print "Destroying Virtual Machine '#{vm.name}'..."
+          vm.power_off unless vm.power_state == 'poweredOff'
+          vm.destroy
+          puts "Done."
+        end
+      end
+    rescue Exception => e
+      $stderr.puts "Can't connect to the host #{address}."
+      if debug?
+        $stderr.puts e.message
+      end
+      exit 1
+    end
+  end
+
+end
+
+class PowerOffVMCommand < BaseCommand
+
+  parameter "ADDRESS", "ESX host address"
+  option "--vm-name", "VM_NAME", "Virtual Machine to Power Off"
+
+  def execute
+    begin
+      host = ESX::Host.connect address, user, password
+      host.virtual_machines.each do |vm|
+        if vm.name == vm_name and vm.power_state == 'poweredOn'
+          print "Powering Off VM #{vm_name}... "
+          vm.power_off
+          puts "Done."
+        end
+      end
+    rescue Exception => e
+      $stderr.puts "Can't connect to the host #{address}."
+      if debug?
+        $stderr.puts e.message
+      end
+      exit 1
+    end
+  end
+
+end
+
+class PowerOnVMCommand < BaseCommand
+
+  parameter "ADDRESS", "ESX host address"
+  option "--vm-name", "VM_NAME", "Virtual Machine to Power On"
+
+  def execute
+    begin
+      host = ESX::Host.connect address, user, password
+      host.virtual_machines.each do |vm|
+        if vm.name == vm_name and vm.power_state != 'poweredOn'
+          print "Powering On VM #{vm_name}... "
+          vm.power_on
+          puts "Done."
+        end
+      end
+    rescue Exception => e
+      $stderr.puts "Can't connect to the host #{address}."
+      if debug?
+        $stderr.puts e.message
+      end
+      exit 1
+    end
+  end
+
+end
+
+
 class CreateVMCommand < BaseCommand
 
   parameter "ADDRESS", "ESX host address"
   option "--disk-file", "DISK_FILE", "VMDK file to import", :attribute_name => :disk_file
-  option "--disk-size", "DISK_SIZE", "VM Disk size", :attribute_name => :disk_size, :default => 8192
+  option "--disk-size", "DISK_SIZE", "VM Disk size in MB", :attribute_name => :disk_size, :default => 8192
   option "--guest-id", "GUEST_ID", "GuestID value", :attribute_name => :guest_id, :default => 'otherGuest'
   option "--name", "VM NAME", "Virtual Machine name (required)"
   option "--memory", "MEMORY", "VM Memory size in MB", :default => 512
@@ -206,6 +286,9 @@ end
 class DefaultCommand < Clamp::Command
   default_subcommand "info", "Display host info", InfoCommand
   subcommand "create-vm", "Create a VM", CreateVMCommand
+  subcommand "poweron-vm", "Power On a VM", PowerOnVMCommand
+  subcommand "poweroff-vm", "Power Off a VM", PowerOffVMCommand
+  subcommand "destroy-vm", "Destroy VM", DestroyVMCommand
 end
 
 begin

@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.2.5'
+  VERSION = '0.3'
 
   class Host
 
@@ -44,11 +44,15 @@ module ESX
 
     # Host memory size in bytes
     #
+    # returns a Fixnum
+    #
     def memory_size
-      @_host.hardware.memorySize
+      @_host.hardware.memorySize.to_i
     end
 
     # Number of CPU cores available in this host
+    #
+    # returns a String
     #
     def cpu_cores
       @_host.hardware.cpuInfo.numCpuCores
@@ -56,11 +60,15 @@ module ESX
 
     # Power state of this host
     #
+    # poweredOn, poweredOff
+    #
     def power_state
       @_host.summary.runtime.powerState
     end
     
     # Host memory usage in bytes 
+    # 
+    # returns a Fixnum
     #
     def memory_usage
       @_host.summary.quickStats.overallMemoryUsage.megabytes.to.bytes.to_i
@@ -161,25 +169,14 @@ module ESX
       h = {
         :key => nic_id,
         :deviceInfo => {
-          :label => "Network Adapter #{nic_id}"
+          :label => "Network Adapter #{nic_id}",
+          :summary => spec[:network] || 'VM Network'
         },
         :backing => RbVmomi::VIM.VirtualEthernetCardNetworkBackingInfo(
-          :deviceName => spec[:network]
+          :deviceName => spec[:network] || 'VM Network'
         )
       }
 
-      network = ''
-
-      if spec[:network]
-        network = spec[:network]
-      else
-        network = 'VM Network'
-      end
-      
-      h[:deviceInfo][:summary] = network
-      h[:backing] = RbVmomi::VIM.VirtualEthernetCardNetworkBackingInfo(:deviceName => network)
-
-      
       if spec[:mac_address]
         h[:macAddress] = spec[:mac_address]
         h[:addressType] = 'manual'
@@ -320,7 +317,7 @@ module ESX
     def self.wrap(vm)
       _vm = VM.new
       _vm.name = vm.name
-      _vm.memory_size = vm.summary.config.memorySizeMB.megabytes.to.bytes
+      _vm.memory_size = vm.summary.config.memorySizeMB.megabytes.to.bytes.to_s
       _vm.cpus = vm.summary.config.numCpu
       _vm.ethernet_cards_number = vm.summary.config.numEthernetCards 
       _vm.virtual_disks_number = vm.summary.config.numVirtualDisks
@@ -346,22 +343,9 @@ module ESX
     end
 
     # Destroy the VirtualMaching removing it from the inventory
-    #
-    # This operation does not destroy VM disks
-    #
+    # and deleting the disk files
     def destroy
-      disks = vm_object.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)
-      #disks.select { |x| x.backing.parent == nil }.each do |disk|
-      #  spec = {
-      #    :deviceChange => [
-      #      {
-      #        :operation => :remove,
-      #        :device => disk
-      #      }
-      #    ]
-      #  }
-      #  vm_object.ReconfigVM_Task(:spec => spec).wait_for_completion
-      #end
+      #disks = vm_object.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)
       vm_object.Destroy_Task.wait_for_completion
     end
 
