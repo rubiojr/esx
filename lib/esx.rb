@@ -6,16 +6,28 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.3.2'
+  VERSION = '0.4'
+  
+  if !defined? Log or Log.nil?
+    Log = Logger.new($stdout)
+    Log.formatter = proc do |severity, datetime, progname, msg|
+        "[ESX] #{severity}: #{msg}\n"
+    end
+    Log.level = Logger::INFO unless (ENV["DEBUG"].eql? "yes" or \
+                                     ENV["DEBUG"].eql? "true")
+    Log.debug "Initializing logger"
+  end
 
   class Host
 
     attr_reader :address, :user, :password
+    attr_accessor :templates_dir
 
-    def initialize(address, user, password)
+    def initialize(address, user, password, opts = {})
       @address = address
       @password = password
       @user = user
+      @templates_dir = opts[:templates_dir] || "/vmfs/volumes/datastore1/esx-gem/templates"
     end
 
     # Connect to a ESX host
@@ -216,46 +228,138 @@ module ESX
     # Run a command in the ESX host via SSH
     #
     def remote_command(cmd)
+      output = ""
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
-        ssh.exec! cmd
+        output = ssh.exec! cmd
       end
+      output
     end
 
     #
     # Upload file
     #
-    def upload_file(source, dest, print_progress = true)
+    def upload_file(source, dest, print_progress = false)
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
-        puts "Uploading file... (#{File.basename(source)})"
+        Log.info "Uploading file #{File.basename(source)}..." if print_progress
         ssh.scp.upload!(source, dest) do |ch, name, sent, total|
           if print_progress
             print "\rProgress: #{(sent.to_f * 100 / total.to_f).to_i}% completed"
           end
         end
       end
-      puts if print_progress
     end
 
-    def import_disk(source, destination, print_progress = true)
+    def template_exist?(vmdk_file)
+      template_file = File.join(@templates_dir, File.basename(vmdk_file))
+      Log.debug "checking if template #{template_file} exists"
+      Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        return false if (ssh.exec! "ls -la #{@templates_dir} 2>/dev/null").nil?
+        return false if (ssh.exec! "ls #{template_file} 2>/dev/null").nil?
+      end
+      true
+    end
+    alias :has_template? :template_exist?
+
+    def list_templates
+      templates = []
+      Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        output = (ssh.exec! "ls -l #{@templates_dir}/*-flat.vmdk 2>/dev/null")
+        output.each_line do |t|
+          templates << t.split().last.strip.chomp rescue next
+        end unless output.nil?
+      end
+      templates
+    end
+
+    #
+    # Expects fooimg.vmdk
+    # Trims path if /path/to/fooimg.vmdk
+    #
+    def delete_template(template_disk)
+      template = File.join(@templates_dir, File.basename(template_disk))
+      template_flat = File.join(@templates_dir, File.basename(template_disk, ".vmdk") + "-flat.vmdk")
+      Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        raise "Template does not exist" if (ssh.exec! "ls #{template} 2>/dev/null").nil?
+        ssh.exec!("rm -f #{template} && rm -f #{template_flat} 2>&1")
+      end
+    end
+
+    def import_template(source, params = {})
+      print_progress = params[:print_progress] || false
+      dest_file = File.join(@templates_dir, File.basename(source))
+      Log.debug "Importing template #{source} to #{dest_file}"
+      return dest_file if template_exist?(dest_file)
+      Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        if (ssh.exec! "ls -la #{@templates_dir} 2>/dev/null").nil?
+          # Create template dir 
+          Log.debug "Creating templates dir #{@templates_dir}"
+          ssh.exec "mkdir -p #{@templates_dir}"
+        end
+      end
+      import_disk_convert(source, dest_file, print_progress)
+    end
+
+    #
+    # Expects vmdk source file path and destination path
+    #
+    # copy_from_template "/home/fooser/my.vmdk", "/vmfs/volumes/datastore1/foovm/foovm.vmdk"
+    #
+    # Destination directory must exist otherwise rises exception
+    #
+    def copy_from_template(template_disk, destination)
+      Log.debug "Copying from template #{template_disk} to #{destination}"
+      raise "Template does not exist" if not template_exist?(template_disk)
+      source = File.join(@templates_dir, File.basename(template_disk))
+      Net::SSH.start(@address, @user, :password => @password) do |ssh|
+        Log.debug ""
+        Log.debug "Clone disk #{source} to #{destination}"
+        Log.debug ssh.exec!("vmkfstools -i #{source} --diskformat thin #{destination} 2>&1")
+      end
+    end
+
+    #
+    # Imports a VMDK
+    #
+    # if params has :use_template => true, the disk is saved as a template in
+    # @templates_dir and cloned from there.
+    # 
+    # Destination directory must exist otherwise rises exception
+    #
+    def import_disk(source, destination, print_progress = false, params = {})
+      use_template = params[:use_template] || false
+      if use_template
+        if !template_exist?(source)
+          import_template(source, { :print_progress => print_progress })
+        end
+        copy_from_template(source, destination)
+      else
+        import_disk_convert source, destination, print_progress
+      end
+    end
+
+    #
+    # This method does all the heavy lifting when importing the disk.
+    # It also converts the imported VMDK to thin format
+    #
+    def import_disk_convert(source, destination, print_progress = false)
       tmp_dest = destination + ".tmp"
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
         if not (ssh.exec! "ls #{destination} 2>/dev/null").nil?
           raise Exception.new("Destination file #{destination} already exists")
         end
-        puts "Uploading file... (#{File.basename(source)})"
+        Log.info "Uploading file... (#{File.basename(source)})" if print_progress
         ssh.scp.upload!(source, tmp_dest) do |ch, name, sent, total|
           if print_progress
             print "\rProgress: #{(sent.to_f * 100 / total.to_f).to_i}%"
           end
         end
         if print_progress
-          puts "\nConverting disk..."
+          Log.info "Converting disk..."
           ssh.exec "vmkfstools -i #{tmp_dest} --diskformat thin #{destination}; rm -f #{tmp_dest}"
         else
           ssh.exec "vmkfstools -i #{tmp_dest} --diskformat thin #{destination} >/dev/null 2>&1; rm -f #{tmp_dest}"
         end
       end
-      puts
     end
     
     private
@@ -317,7 +421,9 @@ module ESX
     def self.wrap(vm)
       _vm = VM.new
       _vm.name = vm.name
-      _vm.memory_size = vm.summary.config.memorySizeMB*1024*1024
+      ## HACK: for some reason vm.summary.config.memorySizeMB returns nil
+      # under some conditions
+      _vm.memory_size = vm.summary.config.memorySizeMB*1024*1024 rescue 0
       _vm.cpus = vm.summary.config.numCpu
       _vm.ethernet_cards_number = vm.summary.config.numEthernetCards 
       _vm.virtual_disks_number = vm.summary.config.numVirtualDisks

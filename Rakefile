@@ -21,6 +21,7 @@ Jeweler::Tasks.new do |gem|
   gem.add_runtime_dependency 'net-ssh'
   gem.add_runtime_dependency 'net-scp'
   gem.add_runtime_dependency 'clamp'
+  gem.files.exclude 'spec/data/*'
   #  gem.add_development_dependency 'rspec', '> 1.2.3'
 end
 Jeweler::RubygemsDotOrgTasks.new

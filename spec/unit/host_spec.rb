@@ -145,4 +145,51 @@ describe "ESX host" do
     @test_host.memory_usage.should be > 0
   end
 
+  it "should have default templates path" do
+    @test_host.templates_dir.should == "/vmfs/volumes/datastore1/esx-gem/templates"
+  end
+  
+  it "should not have tc.vmdk template" do
+    @test_host.has_template?("tc.vmdk").should == false
+    @test_host.list_templates.size.should == 0
+  end
+  
+  it "should import tc.vmdk template" do
+    @test_host.import_template File.join(test_data_dir, "tc.vmdk")
+    @test_host.has_template?("tc.vmdk").should == true
+  end
+
+  it "should copy from template" do
+    @test_host.has_template?("tc.vmdk").should == true
+    @test_host.remote_command("mkdir -p /vmfs/volumes/datastore1/foovm/")
+    @test_host.copy_from_template "tc.vmdk", "/vmfs/volumes/datastore1/foovm/foovm.vmdk"
+    @test_host.remote_command("ls /vmfs/volumes/datastore1/foovm/foovm.vmdk").strip.chomp.should == "/vmfs/volumes/datastore1/foovm/foovm.vmdk"
+    @test_host.remote_command("rm -rf /vmfs/volumes/datastore1/foovm")
+  end
+
+  it "should list one template" do
+    @test_host.list_templates.size.should == 1
+  end
+  
+  it "should import duplicated tc.vmdk template" do
+    @test_host.import_template File.join(test_data_dir, "tc.vmdk")
+    @test_host.has_template?("tc.vmdk").should == true
+    @test_host.list_templates.size.should == 1
+  end
+
+  it "should delete tc.vmdk and tc-flat.vmdk template" do
+    @test_host.delete_template File.join(test_data_dir, "tc.vmdk")
+    @test_host.has_template?("tc.vmdk").should == false 
+    @test_host.list_templates.size.should == 0
+  end
+
+  it "should import disk tc.vmdk into desired dir" do
+    @test_host.remote_command("mkdir /vmfs/volumes/datastore1/foobar/")
+    @test_host.import_disk(File.join(test_data_dir, "tc.vmdk"), 
+                           "/vmfs/volumes/datastore1/foobar/foobar.vmdk")
+
+    @test_host.remote_command("ls /vmfs/volumes/datastore1/foobar/foobar.vmdk").strip.chomp.should == "/vmfs/volumes/datastore1/foobar/foobar.vmdk"
+    @test_host.remote_command "rm -rf /vmfs/volumes/datastore1/foobar/"
+  end
+
 end

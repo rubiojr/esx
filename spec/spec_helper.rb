@@ -13,15 +13,15 @@ require 'esx'
 module ESXTestHelpers
   
   def esx_host
-    "esx-test-host"
+    ENV["ESX_HOST"] || "esx-test-host"
   end
 
   def esx_user
-    "root"
+    ENV["ESX_USER"] || "root"
   end
 
   def esx_password
-    ""
+    ENV["ESX_PASSWORD"] || ""
   end
 
   def test_data_dir
