@@ -153,6 +153,12 @@ describe "ESX host" do
     @test_host.has_template?("tc.vmdk").should == false
     @test_host.list_templates.size.should == 0
   end
+
+  it "should not have -flat.vmdk postfix in template names" do
+    @test_host.list_templates.each do |t|
+      t.should_not match /-flat\.vmdk$/
+    end
+  end
   
   it "should import tc.vmdk template" do
     @test_host.import_template File.join(test_data_dir, "tc.vmdk")
@@ -168,6 +174,7 @@ describe "ESX host" do
   end
 
   it "should list one template" do
+    @test_host.list_templates.is_a?(Array).should be_true
     @test_host.list_templates.size.should == 1
   end
   

@@ -1,3 +1,7 @@
+# 0.4.1 - 2012/03/26
+
+* Minor fixes
+
 # 0.4 - 2012/03/25 
 
 * Do not include test data inside the gem.
@@ -13,24 +17,24 @@
     host = ESX::Host.connect 'my-esx-host', 
                              'root', 
                              'password'
+
     host.import_template "/path/to/template.vmdk"
 
-  This will copy the "template.vmdk" file to the default templates_dir in ESX. Default templates dir is "/vmfs/volumes/datastore1/esx-gem/templates".
+This will copy the "template.vmdk" file to the default templates_dir in ESX. Default templates dir is "/vmfs/volumes/datastore1/esx-gem/templates".
 
-  The template is automatically converted to VMDK thin format.
+The template is automatically converted to VMDK thin format.
   
-  Using the template:
+Using the template:
 
     host.copy_from_template "template.vmdk", "/vmfs/volumes/datastore1/foo.vmdk"
 
-  Sorter version:
+Sorter version:
 
     host.import_disk "/path/to/local/template.vmdk",      # local file 
                      "/vmfs/volumes/datastore1/foo.vmdk", # remote path in ESX
                      { :use_template => true }
 
-  If the template "template.vmdk" is found, use that. Otherwise import the disk, save it as a template and clone the template to "/vmfs/volumes/datastore1/foo.vmdk"
-
+If the template "template.vmdk" is found, use that. Otherwise import the disk, save it as a template and clone the template to "/vmfs/volumes/datastore1/foo.vmdk"
 
 * Added the following methods to ESX::Host
 

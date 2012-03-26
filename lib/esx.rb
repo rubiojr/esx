@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.4'
+  VERSION = '0.4.1'
   
   if !defined? Log or Log.nil?
     Log = Logger.new($stdout)
@@ -251,11 +251,12 @@ module ESX
 
     def template_exist?(vmdk_file)
       template_file = File.join(@templates_dir, File.basename(vmdk_file))
-      Log.debug "checking if template #{template_file} exists"
+      Log.debug "Checking if template #{template_file} exists"
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
         return false if (ssh.exec! "ls -la #{@templates_dir} 2>/dev/null").nil?
         return false if (ssh.exec! "ls #{template_file} 2>/dev/null").nil?
       end
+      Log.debug "Template #{template_file} found"
       true
     end
     alias :has_template? :template_exist?
@@ -265,7 +266,7 @@ module ESX
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
         output = (ssh.exec! "ls -l #{@templates_dir}/*-flat.vmdk 2>/dev/null")
         output.each_line do |t|
-          templates << t.split().last.strip.chomp rescue next
+          templates << t.gsub(/-flat\.vmdk/,".vmdk").split().last.strip.chomp rescue next
         end unless output.nil?
       end
       templates
@@ -276,10 +277,14 @@ module ESX
     # Trims path if /path/to/fooimg.vmdk
     #
     def delete_template(template_disk)
+      Log.debug "deleting template #{template_disk}"
       template = File.join(@templates_dir, File.basename(template_disk))
       template_flat = File.join(@templates_dir, File.basename(template_disk, ".vmdk") + "-flat.vmdk")
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
-        raise "Template does not exist" if (ssh.exec! "ls #{template} 2>/dev/null").nil?
+        if (ssh.exec! "ls #{template} 2>/dev/null").nil?
+          Log.error "Template #{template_disk} does not exist"
+          raise "Template does not exist" 
+        end 
         ssh.exec!("rm -f #{template} && rm -f #{template_flat} 2>&1")
       end
     end
@@ -311,7 +316,6 @@ module ESX
       raise "Template does not exist" if not template_exist?(template_disk)
       source = File.join(@templates_dir, File.basename(template_disk))
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
-        Log.debug ""
         Log.debug "Clone disk #{source} to #{destination}"
         Log.debug ssh.exec!("vmkfstools -i #{source} --diskformat thin #{destination} 2>&1")
       end
@@ -328,7 +332,9 @@ module ESX
     def import_disk(source, destination, print_progress = false, params = {})
       use_template = params[:use_template] || false
       if use_template
+        Log.debug "import_disk :use_template => true"
         if !template_exist?(source)
+          Log.debug "import_disk, template does not exist, importing."
           import_template(source, { :print_progress => print_progress })
         end
         copy_from_template(source, destination)
