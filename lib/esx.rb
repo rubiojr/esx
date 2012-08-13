@@ -367,6 +367,10 @@ module ESX
         end
       end
     end
+
+    def datacenter
+      @_datacenter
+    end
     
     private
     #
