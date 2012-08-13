@@ -150,6 +150,38 @@ class PowerOnVMCommand < BaseCommand
 
 end
 
+class DeleteNICCommand < BaseCommand
+  parameter "ADDRESS", "ESX host address"
+  option "--vm-name", "VM_NAME", "Virtual Machine to Power On"
+  option "--mac-address", "MAC_ADDRESS", "MAC address to remove"
+
+  def execute
+    begin
+      host = ESX::Host.connect address, user, password
+
+      datacenter = host.datacenter
+      vm = datacenter.find_vm(vm_name)
+      if vm
+        hd=vm.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).find{|nic| nic.props[:macAddress].eql?mac_address}
+        if hd
+          spec = RbVmomi::VIM.VirtualMachineConfigSpec({:deviceChange => [{:operation => :remove,:device => hd}]})
+          vm.ReconfigVM_Task(:spec => spec).wait_for_completion   
+          puts "Done." 
+        else
+          puts "No NIC with #{mac_address} mac address was found!"
+        end
+      else
+        puts "No Virtual Machine found!"
+      end
+    rescue Exception => e
+      $stderr.puts "Can't connect to the host #{address}."
+      if debug?
+        $stderr.puts e.message
+      end
+      exit 1
+    end
+  end 
+end
 
 class CreateVMCommand < BaseCommand
 
@@ -284,11 +316,13 @@ class CreateVMCommand < BaseCommand
 end
 
 class DefaultCommand < Clamp::Command
-  default_subcommand "info", "Display host info", InfoCommand
+  self.default_subcommand="info"
+  subcommand "info", "Display host info", InfoCommand
   subcommand "create-vm", "Create a VM", CreateVMCommand
   subcommand "poweron-vm", "Power On a VM", PowerOnVMCommand
   subcommand "poweroff-vm", "Power Off a VM", PowerOffVMCommand
   subcommand "destroy-vm", "Destroy VM", DestroyVMCommand
+  subcommand "delete-nic", "Delete NIC from a VM", DeleteNICCommand
 end
 
 begin
