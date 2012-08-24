@@ -5,6 +5,7 @@ require 'terminal-table/import'
 require 'clamp'
 require 'net/http'
 require 'fileutils'
+require 'json'
 
 class BaseCommand < Clamp::Command
   parameter "ADDRESS", "ESX host address"
@@ -152,7 +153,7 @@ end
 
 class DeleteNICCommand < BaseCommand
   parameter "ADDRESS", "ESX host address"
-  option "--vm-name", "VM_NAME", "Virtual Machine to Power On"
+  option "--vm-name", "VM_NAME", "Virtual Machine"
   option "--mac-address", "MAC_ADDRESS", "MAC address to remove"
 
   def execute
@@ -169,6 +170,56 @@ class DeleteNICCommand < BaseCommand
           puts "Done." 
         else
           puts "No NIC with #{mac_address} mac address was found!"
+        end
+      else
+        puts "No Virtual Machine found!"
+      end
+    rescue Exception => e
+      $stderr.puts "Can't connect to the host #{address}."
+      if debug?
+        $stderr.puts e.message
+      end
+      exit 1
+    end
+  end 
+end
+
+
+class AddNICCommand < BaseCommand
+  parameter "ADDRESS", "ESX host address"
+  option "--vm-name", "VM_NAME", "Virtual Machine"
+  option "--mac-address", "MAC_ADDRESS", "MAC address to add"
+  option "--network", "NETWORK", "Network name for new interface"
+
+  def execute
+    begin
+      host = ESX::Host.connect address, user, password
+
+      datacenter = host.datacenter
+      vm = datacenter.find_vm(vm_name)
+      if vm
+        hd = vm.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).find{|nic| nic.props[:macAddress].eql?mac_address}
+        s = vm.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).size
+        if hd
+          puts "NIC with #{mac_address} mac address already exists!"
+        else
+          spec = RbVmomi::VIM.VirtualMachineConfigSpec({:deviceChange => [{
+            :operation => :add,
+            :device => RbVmomi::VIM.VirtualE1000({
+              :key => s, 
+              :deviceInfo => {
+                :label => "Network Adapter #{s}",
+                :summary => network || 'VM Network'
+              },
+              :backing => RbVmomi::VIM.VirtualEthernetCardNetworkBackingInfo(
+                :deviceName => network || 'VM Network'
+              ),
+              :macAddress => mac_address,
+              :addressType => 'manual'
+            })
+          }]})
+          vm.ReconfigVM_Task(:spec => spec).wait_for_completion   
+          puts "Done." 
         end
       else
         puts "No Virtual Machine found!"
@@ -322,6 +373,7 @@ class DefaultCommand < Clamp::Command
   subcommand "poweron-vm", "Power On a VM", PowerOnVMCommand
   subcommand "poweroff-vm", "Power Off a VM", PowerOffVMCommand
   subcommand "destroy-vm", "Destroy VM", DestroyVMCommand
+  subcommand "add-nic", "Add NIC to a VM", AddNICCommand
   subcommand "delete-nic", "Delete NIC from a VM", DeleteNICCommand
 end
 
