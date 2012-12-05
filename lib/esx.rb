@@ -37,7 +37,6 @@ module ESX
     # Host connection is insecure by default
     def self.connect(host, user, password,  opts = {},insecure = true)
       templates_dir = opts[:templates_dir] || "/vmfs/volumes/datastore1/esx-gem/templates"
-      print templates_dir + "\n"
       vim = RbVmomi::VIM.connect :host => host, :user => user, :password => password, :insecure => insecure
       host = Host.new(host, user,password, :templates_dir => templates_dir)
       host.vim = vim
