@@ -12,6 +12,7 @@ class BaseCommand < Clamp::Command
   option "--user", "USER", "Username", :default => "root"
   option "--password", "PASSWORD", "Password", :default => ""
   option "--debug", :flag, "Print debugging info"
+  option "--free-license", :flag, "If your Hypervisor have a free license", :default => false
 end
 
 class InfoCommand < BaseCommand
@@ -23,7 +24,7 @@ class InfoCommand < BaseCommand
   def execute
     begin
 
-      host = ESX::Host.connect(address, user, password)
+      host = ESX::Host.connect(address, user, password, true, {:free_license=>free_license?})
 
       puts
       name = host.name.upcase
@@ -79,9 +80,9 @@ class DestroyVMCommand < BaseCommand
 
   def execute
     begin
-      host = ESX::Host.connect address, user, password
+      host = ESX::Host.connect address, user, password, true, {:free_license=>free_license?}
       host.virtual_machines.each do |vm|
-        if vm.name == vm_name 
+        if vm.name == vm_name
           print "Destroying Virtual Machine '#{vm.name}'..."
           vm.power_off unless vm.power_state == 'poweredOff'
           vm.destroy
@@ -106,7 +107,7 @@ class PowerOffVMCommand < BaseCommand
 
   def execute
     begin
-      host = ESX::Host.connect address, user, password
+      host = ESX::Host.connect address, user, password, true, {:free_license=>free_license?}
       host.virtual_machines.each do |vm|
         if vm.name == vm_name and vm.power_state == 'poweredOn'
           print "Powering Off VM #{vm_name}... "
@@ -132,7 +133,7 @@ class PowerOnVMCommand < BaseCommand
 
   def execute
     begin
-      host = ESX::Host.connect address, user, password
+      host = ESX::Host.connect address, user, password, true, {:free_license=>free_license?}
       host.virtual_machines.each do |vm|
         if vm.name == vm_name and vm.power_state != 'poweredOn'
           print "Powering On VM #{vm_name}... "
@@ -155,19 +156,40 @@ class DeleteNICCommand < BaseCommand
   parameter "ADDRESS", "ESX host address"
   option "--vm-name", "VM_NAME", "Virtual Machine"
   option "--mac-address", "MAC_ADDRESS", "MAC address to remove"
+  option "--force", :flag, "Force reboot"
 
   def execute
     begin
-      host = ESX::Host.connect address, user, password
+      host = ESX::Host.connect address, user, password, true, {:free_license=>free_license?}
 
-      datacenter = host.datacenter
-      vm = datacenter.find_vm(vm_name)
+      vm = host.virtual_machines.find{|x| x.name.eql? vm_name}
       if vm
-        hd=vm.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).find{|nic| nic.props[:macAddress].eql?mac_address}
+        hd=vm.vm_object.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).find{|nic| nic.props[:macAddress].eql?mac_address}
         if hd
           spec = RbVmomi::VIM.VirtualMachineConfigSpec({:deviceChange => [{:operation => :remove,:device => hd}]})
-          vm.ReconfigVM_Task(:spec => spec).wait_for_completion   
-          puts "Done." 
+          unless free_license?
+            vm.vm_object.ReconfigVM_Task(:spec => spec).wait_for_completion
+          else
+            #TODO: This is horrible! Find a way to reconfigure the VM without downtime
+            key = hd.key
+            vmx_file = vm.vm_object.config.files.vmPathName.gsub("[","/vmfs/volumes/").gsub(/]\s*/,"/")
+            puts "VMX file: #{vmx_file}" if debug?
+            eth_name = host.remote_command("fgrep #{mac_address} #{vmx_file} | cut -d. -f1")
+            if eth_name
+              eth_name.strip!
+              puts "#{eth_name} found!" if debug?
+              host.remote_command "sed -i -e '/.*#{eth_name}\..*/d' #{vmx_file}"
+            end
+            if force?
+              vm.power_off
+              host.remote_command "vim-cmd vmsvc/unregister #{vm.vmid}"
+              id = host.remote_command "vim-cmd solo/registervm #{vmx_file}"
+              host.remote_command "vim-cmd vmsvc/power.on #{id}"
+            else
+              puts "You have to power-off the vm unregister it and register it agin."
+            end
+          end
+          puts "Done."
         else
           puts "No NIC with #{mac_address} mac address was found!"
         end
@@ -181,45 +203,71 @@ class DeleteNICCommand < BaseCommand
       end
       exit 1
     end
-  end 
+  end
 end
 
 
 class AddNICCommand < BaseCommand
   parameter "ADDRESS", "ESX host address"
   option "--vm-name", "VM_NAME", "Virtual Machine"
-  option "--mac-address", "MAC_ADDRESS", "MAC address to add"
+  option "--mac-address", "MAC_ADDRESS", "MAC address to add", :default => nil
   option "--network", "NETWORK", "Network name for new interface"
+  option "--force", :flag, "Force reboot"
 
   def execute
     begin
-      host = ESX::Host.connect address, user, password
-
-      datacenter = host.datacenter
-      vm = datacenter.find_vm(vm_name)
+      host = ESX::Host.connect address, user, password, true, {:free_license=>free_license?}
+      vm = host.virtual_machines.find{|x| x.name.eql? vm_name}
       if vm
-        hd = vm.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).find{|nic| nic.props[:macAddress].eql?mac_address}
-        s = vm.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).size
+        hd = vm.vm_object.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).find{|nic| nic.props[:macAddress].eql?mac_address}
+        s = vm.vm_object.config.hardware.device.grep(RbVmomi::VIM::VirtualEthernetCard).size
         if hd
           puts "NIC with #{mac_address} mac address already exists!"
         else
+          if mac_address
+            nics = {:macAddress => mac_address, :addressType => 'manual'}
+          else
+            nics = {:addressType => 'generated'}
+          end
           spec = RbVmomi::VIM.VirtualMachineConfigSpec({:deviceChange => [{
             :operation => :add,
             :device => RbVmomi::VIM.VirtualE1000({
-              :key => s, 
+              :key => s,
               :deviceInfo => {
                 :label => "Network Adapter #{s}",
                 :summary => network || 'VM Network'
               },
               :backing => RbVmomi::VIM.VirtualEthernetCardNetworkBackingInfo(
                 :deviceName => network || 'VM Network'
-              ),
-              :macAddress => mac_address,
-              :addressType => 'manual'
-            })
+              )
+            }.merge(nics))
           }]})
-          vm.ReconfigVM_Task(:spec => spec).wait_for_completion   
-          puts "Done." 
+          unless free_license?
+            vm.vm_object.ReconfigVM_Task(:spec => spec).wait_for_completion
+          else
+            #TODO: This is horrible! Find a way to reconfigure the VM without downtime
+            vmx_file = vm.vm_object.config.files.vmPathName.gsub("[","/vmfs/volumes/").gsub(/]\s*/,"/")
+            puts "VMX file: #{vmx_file}" if debug?
+            host.remote_command " echo 'ethernet#{s}.present = \"true\"' >> #{vmx_file}"
+            host.remote_command " echo 'ethernet#{s}.virtualDev = \"e1000\"' >> #{vmx_file}"
+            host.remote_command " echo 'ethernet#{s}.wakeOnPcktRcv = \"false\"' >> #{vmx_file}"
+            host.remote_command " echo 'ethernet#{s}.networkName = \"#{network || 'VM Network'}\"' >> #{vmx_file}"
+            if mac_address
+              host.remote_command " echo 'ethernet#{s}.addressType = \"static\"' >> #{vmx_file}"
+              host.remote_command " echo 'ethernet#{s}.address = \"#{mac_address}\"' >> #{vmx_file}"
+            else
+              host.remote_command " echo 'ethernet#{s}.addressType = \"generated\"' >> #{vmx_file}"
+            end
+            if force?
+              vm.power_off
+              host.remote_command "vim-cmd vmsvc/unregister #{vm.vmid}"
+              id = host.remote_command "vim-cmd solo/registervm #{vmx_file}"
+              host.remote_command "vim-cmd vmsvc/power.on #{id}"
+            else
+              puts "You have to power-off the vm unregister it and register it agin."
+            end
+          end
+          puts "Done."
         end
       else
         puts "No Virtual Machine found!"
@@ -231,7 +279,7 @@ class AddNICCommand < BaseCommand
       end
       exit 1
     end
-  end 
+  end
 end
 
 class CreateVMCommand < BaseCommand
@@ -250,7 +298,7 @@ class CreateVMCommand < BaseCommand
 
   def execute
     begin
-      host = ESX::Host.connect address, user, password
+      host = ESX::Host.connect address, user, password, true, {:free_license=>free_license?}
     rescue Exception => e
       $stderr.puts "Can't connect to the host #{address}."
       if debug?
@@ -264,7 +312,7 @@ class CreateVMCommand < BaseCommand
     downloaded_file = nil
     if disk_file.nil?
       # if --disk-file nil? create the VM without disk
-      vm = host.create_vm :vm_name => name, 
+      vm = host.create_vm :vm_name => name,
                           :datastore => datastore, :disk_type => :flat, :memory => memory,
                           :disk_size => disk_size,
                           :guest_id => guest_id, :nics => [{:mac_address => mac_address, :network => vm_network}]
@@ -279,7 +327,7 @@ class CreateVMCommand < BaseCommand
           puts
           df = tmpfile
         rescue Exception => e
-          FileUtils.rm_f(tmpfile) 
+          FileUtils.rm_f(tmpfile)
           $stderr.puts "Error downloading file from #{downloaded_file}."
           $stderr.puts e.message if debug?
           exit 1
@@ -303,10 +351,10 @@ class CreateVMCommand < BaseCommand
 
       if not downloaded_file.nil?
         puts "Deleting tmp file #{df}" if debug?
-        FileUtils.rm_f(df) 
+        FileUtils.rm_f(df)
       end
-      vm = host.create_vm :vm_name => name, 
-                          :disk_file => "#{name}/#{name}.vmdk", 
+      vm = host.create_vm :vm_name => name,
+                          :disk_file => "#{name}/#{name}.vmdk",
                           :datastore => datastore, :disk_type => :flat, :memory => memory,
                           :guest_id => guest_id, :nics => [{mac_address => mac_address, :network => vm_network}]
     end
@@ -316,7 +364,7 @@ class CreateVMCommand < BaseCommand
   end
 
   def report_progress(progress, total, show_parts=true)
-    line_reset = "\r\e[0K" 
+    line_reset = "\r\e[0K"
     percent = (progress.to_f / total.to_f) * 100
     line = "Progress: #{percent.to_i}%"
     line << " (#{progress} / #{total})" if show_parts

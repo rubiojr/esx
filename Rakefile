@@ -12,7 +12,7 @@ Jeweler::Tasks.new do |gem|
   gem.summary = %Q{Simple RbVmomi wrapper library to manage VMWare ESX hosts}
   gem.description = %Q{Manage VMWare ESX hosts with ease}
   gem.email = "rubiojr@frameos.org"
-  gem.authors = ["Sergio Rubio"]
+  gem.authors = ["Sergio Rubio","Massimo Maino"]
   # Include your dependencies below. Runtime dependencies are required when using your gem,
   # and development dependencies are only needed for development (ie running rake tasks, tests, etc)
   gem.add_runtime_dependency 'alchemist'
@@ -22,6 +22,7 @@ Jeweler::Tasks.new do |gem|
   gem.add_runtime_dependency 'net-scp'
   gem.add_runtime_dependency 'clamp'
   gem.files.exclude 'spec/data/*'
+  gem.files.include 'templates/*'
   #  gem.add_development_dependency 'rspec', '> 1.2.3'
 end
 Jeweler::RubygemsDotOrgTasks.new
