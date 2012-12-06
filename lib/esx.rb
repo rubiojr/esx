@@ -40,11 +40,9 @@ module ESX
     # Requires hostname/ip, username and password
     #
     # Host connection is insecure by default
-    def self.connect(host, user, password, insecure=true, opts = {})
-      #free_license=false
+   def self.connect(host, user, password,  insecure = true, opts = {})
       vim = RbVmomi::VIM.connect :host => host, :user => user, :password => password, :insecure => insecure
-      host = Host.new(host,user,password)
-      #,{:free_license=>free_license}
+      host = Host.new(host, user,password, opts)
       host.vim = vim
       host
     end
