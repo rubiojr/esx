@@ -6,7 +6,7 @@ require 'net/ssh'
 
 module ESX
 
-  VERSION = '0.4.1'
+  VERSION = '0.4.2'
   
   if !defined? Log or Log.nil?
     Log = Logger.new($stdout)
