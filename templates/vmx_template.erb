@@ -1,0 +1,27 @@
+.encoding = "UTF-8"
+config.version = "8"
+virtualHW.version = "7"
+vmci0.present = "true"
+displayName = "<%= spec[:vm_name] %>"
+numvcpus = "<%= spec[:cpus] %>"
+memsize = "<%= spec[:memory] %>"
+scsi0.present = "true"
+scsi0.sharedBus = "none"
+scsi0.virtualDev = "lsilogic"
+scsi0:0.present = "true"
+scsi0:0.fileName = "<%= spec[:disk_file].split("/").last %>"
+scsi0:0.deviceType = "scsi-hardDisk"
+guestOS = <%= spec[:guest_id] %>
+floppy0.present = "FALSE"
+<% spec[:nics].each_with_index do |nic,index| %>
+ethernet<%= index %>.present = "true"
+ethernet<%= index %>.virtualDev = "e1000"
+ethernet<%= index %>.wakeOnPcktRcv = "false"
+ethernet<%= index %>.networkName = "<%= nic[:network] %>"
+<% if nic[:mac_address] %>
+ethernet<%= index %>.addressType = "static"
+ethernet<%= index %>.address = "<%= nic[:mac_address] %>"
+<% else %>
+ethernet<%= index %>.addressType = "generated"
+<% end %>
+<% end %>
