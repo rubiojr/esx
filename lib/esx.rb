@@ -3,11 +3,12 @@ require 'rbvmomi'
 require 'alchemist'
 require 'net/scp'
 require 'net/ssh'
+require 'erb'
 
 module ESX
 
-  VERSION = '0.4.1'
-  
+  VERSION = '0.4.2'
+
   if !defined? Log or Log.nil?
     Log = Logger.new($stdout)
     Log.formatter = proc do |severity, datetime, progname, msg|
@@ -20,7 +21,7 @@ module ESX
 
   class Host
 
-    attr_reader :address, :user, :password
+    attr_reader :address, :user, :password, :free_license
     attr_accessor :templates_dir
 
     def initialize(address, user, password, opts = {})
@@ -28,6 +29,10 @@ module ESX
       @password = password
       @user = user
       @templates_dir = opts[:templates_dir] || "/vmfs/volumes/datastore1/esx-gem/templates"
+      @free_license = opts[:free_license] || false
+      if @free_license and !@user.eql?"root"
+        raise Exception.new("Can't user Free License mode with user #{@user}. Please use 'root' user.")
+      end
     end
 
     # Connect to a ESX host
@@ -35,9 +40,11 @@ module ESX
     # Requires hostname/ip, username and password
     #
     # Host connection is insecure by default
-    def self.connect(host, user, password, insecure=true)
+    def self.connect(host, user, password, insecure=true, opts = {})
+      #free_license=false
       vim = RbVmomi::VIM.connect :host => host, :user => user, :password => password, :insecure => insecure
-      host = Host.new(host, user,password)
+      host = Host.new(host,user,password)
+      #,{:free_license=>free_license}
       host.vim = vim
       host
     end
@@ -77,16 +84,16 @@ module ESX
     def power_state
       @_host.summary.runtime.powerState
     end
-    
-    # Host memory usage in bytes 
-    # 
+
+    # Host memory usage in bytes
+    #
     # returns a Fixnum
     #
     def memory_usage
       @_host.summary.quickStats.overallMemoryUsage * 1024 * 1024
     end
 
-    
+
     # Return a list of ESX::Datastore objects available in this host
     #
     def datastores
@@ -98,7 +105,7 @@ module ESX
     end
 
     # Create a Virtual Machine
-    # 
+    #
     # Requires a Hash with the following keys:
     #
     # {
@@ -112,7 +119,7 @@ module ESX
     #   :disk_type => flat, sparse (default flat)
     # }
     #
-    # supported guest_id list: 
+    # supported guest_id list:
     # http://pubs.vmware.com/vsphere-50/index.jsp?topic=/com.vmware.wssdk.apiref.doc_50/vim.vm.GuestOsDescriptor.GuestOsIdentifier.html
     #
     # Default values above.
@@ -153,7 +160,7 @@ module ESX
           }
         ]
       }
-      
+
       #Add multiple nics
       nics_count = 0
       if spec[:nics]
@@ -162,19 +169,35 @@ module ESX
             {
               :operation => :add,
               :device => RbVmomi::VIM.VirtualE1000(create_net_dev(nics_count, nic_spec))
-              
+
             }
           )
           nics_count += 1
         end
       end
       # VMDK provided, replace the empty vmdk
-      vm_cfg[:deviceChange].push(create_disk_spec(:disk_file => spec[:disk_file], 
+      vm_cfg[:deviceChange].push(create_disk_spec(:disk_file => spec[:disk_file],
                                 :disk_type => spec[:disk_type],
                                 :disk_size => spec[:disk_size],
                                 :datastore => spec[:datastore]))
 
-      VM.wrap(@_datacenter.vmFolder.CreateVM_Task(:config => vm_cfg, :pool => @_datacenter.hostFolder.children.first.resourcePool).wait_for_completion)
+      unless @free_license
+        VM.wrap(@_datacenter.vmFolder.CreateVM_Task(:config => vm_cfg, :pool => @_datacenter.hostFolder.children.first.resourcePool).wait_for_completion,self)
+      else
+        gem_root = Gem::Specification.find_by_name("esx").gem_dir
+        template_path = File.join(gem_root, 'templates', 'vmx_template.erb')
+        erb = ERB.new File.read(template_path)
+        vmx = erb.result binding
+        tmp_vmx = Tempfile.new 'vmx'
+        tmp_vmx.write vmx
+        tmp_vmx.close
+        ds = spec[:datastore]||'datastore1'
+        ds = ds.gsub('[','').gsub(']','')
+        vmx_path = "/vmfs/volumes/#{ds}/#{spec[:vm_name]}/#{spec[:vm_name]}.vmx"
+        upload_file tmp_vmx.path, vmx_path
+        remote_command "vim-cmd solo/registervm #{vmx_path}"
+        VM.wrap(@_datacenter.find_vm(spec[:vm_name]),self)
+      end
     end
 
     def create_net_dev(nic_id, spec)
@@ -199,10 +222,10 @@ module ESX
     end
 
     # Return product info as an array of strings containing
-    # 
+    #
     # fullName, apiType, apiVersion, osType, productLineId, vendor, version
-    # 
-    def host_info 
+    #
+    def host_info
       [
        @_host.summary.config.product.fullName,
        @_host.summary.config.product.apiType,
@@ -215,11 +238,11 @@ module ESX
     end
 
     # Return a list of VM available in the inventory
-    # 
+    #
     def virtual_machines
       vms = []
-      vm = @_datacenter.vmFolder.childEntity.each do |x| 
-        vms << VM.wrap(x)
+      vm = @_datacenter.vmFolder.childEntity.each do |x|
+        vms << VM.wrap(x,self)
       end
       vms
     end
@@ -283,8 +306,8 @@ module ESX
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
         if (ssh.exec! "ls #{template} 2>/dev/null").nil?
           Log.error "Template #{template_disk} does not exist"
-          raise "Template does not exist" 
-        end 
+          raise "Template does not exist"
+        end
         ssh.exec!("rm -f #{template} && rm -f #{template_flat} 2>&1")
       end
     end
@@ -296,7 +319,7 @@ module ESX
       return dest_file if template_exist?(dest_file)
       Net::SSH.start(@address, @user, :password => @password) do |ssh|
         if (ssh.exec! "ls -la #{@templates_dir} 2>/dev/null").nil?
-          # Create template dir 
+          # Create template dir
           Log.debug "Creating templates dir #{@templates_dir}"
           ssh.exec "mkdir -p #{@templates_dir}"
         end
@@ -326,7 +349,7 @@ module ESX
     #
     # if params has :use_template => true, the disk is saved as a template in
     # @templates_dir and cloned from there.
-    # 
+    #
     # Destination directory must exist otherwise rises exception
     #
     def import_disk(source, destination, print_progress = false, params = {})
@@ -371,7 +394,7 @@ module ESX
     def datacenter
       @_datacenter
     end
-    
+
     private
     #
     # disk_file
@@ -389,7 +412,7 @@ module ESX
       datastore = params[:datastore]
       datastore = datastore + " #{disk_file}" if not disk_file.nil?
       spec = {}
-      if disk_type == :sparse 
+      if disk_type == :sparse
         spec = {
           :operation => :add,
           :device => RbVmomi::VIM.VirtualDisk(
@@ -421,52 +444,71 @@ module ESX
 
   class VM
 
-    attr_accessor :memory_size, :cpus, :ethernet_cards_number
-    attr_accessor :name, :virtual_disks_number, :vm_object
+    attr_accessor :memory_size, :cpus, :ethernet_cards_number, :vmid
+    attr_accessor :name, :virtual_disks_number, :vm_object, :host
 
     # Wraps a RbVmomi::VirtualMachine object
     #
     # **This method should never be called manually.**
     #
-    def self.wrap(vm)
+    def self.wrap(vm,host)
       _vm = VM.new
       _vm.name = vm.name
       ## HACK: for some reason vm.summary.config.memorySizeMB returns nil
       # under some conditions
       _vm.memory_size = vm.summary.config.memorySizeMB*1024*1024 rescue 0
       _vm.cpus = vm.summary.config.numCpu
-      _vm.ethernet_cards_number = vm.summary.config.numEthernetCards 
+      _vm.ethernet_cards_number = vm.summary.config.numEthernetCards
       _vm.virtual_disks_number = vm.summary.config.numVirtualDisks
       _vm.vm_object = vm
+      _vm.host = host
+      _vm.vmid = vm.to_s.scan(/\"([0-9]+)\"/).flatten.first
       _vm
     end
 
     # Returns the state of the VM as a string
     # 'poweredOff', 'poweredOn'
-    # 
+    #
     def power_state
       vm_object.summary.runtime.powerState
     end
 
     # Power On a VM
     def power_on
-      vm_object.PowerOnVM_Task.wait_for_completion
+      unless host.free_license
+        vm_object.PowerOnVM_Task.wait_for_completion
+      else
+        host.remote_command "vim-cmd vmsvc/power.on #{vmid}"
+      end
     end
 
     # Power Off a VM
     def power_off
-      vm_object.PowerOffVM_Task.wait_for_completion
+      unless host.free_license
+        vm_object.PowerOffVM_Task.wait_for_completion
+      else
+        host.remote_command "vim-cmd vmsvc/power.off #{vmid}"
+      end
     end
 
     # Destroy the VirtualMaching removing it from the inventory
     # and deleting the disk files
     def destroy
       #disks = vm_object.config.hardware.device.grep(RbVmomi::VIM::VirtualDisk)
-      vm_object.Destroy_Task.wait_for_completion
+      unless host.free_license
+        vm_object.Destroy_Task.wait_for_completion
+      else
+        host.remote_command "vim-cmd vmsvc/power.off #{vmid}"
+        host.remote_command "vim-cmd vmsvc/destroy #{vmid}"
+      end
     end
 
     def reset
-      vm_object.ResetVM_Task.wait_for_completion
+      unless host.free_license
+        vm_object.ResetVM_Task.wait_for_completion
+      else
+        host.remote_command "vim-cmd vmsvc/power.reset #{vmid}"
+      end
     end
 
     def guest_info
@@ -491,7 +533,7 @@ module ESX
   end
 
   class NetworkInterface
-    
+
     attr_accessor :_wrapped_object
 
     # Accepts VirtualEthernetCard and GuestNicInfo objects
@@ -513,7 +555,7 @@ module ESX
     end
 
     def mac
-      _wrapped_object.macAddress 
+      _wrapped_object.macAddress
     end
 
   end
@@ -531,7 +573,7 @@ module ESX
     def ip_address
       _wrapped_object.ipAddress
     end
-    
+
     def nics
       n = []
       _wrapped_object.net.each do |nic|
