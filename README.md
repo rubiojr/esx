@@ -111,3 +111,4 @@ Run rspec from the base dir. By default, the tests try to connect to an ESX host
 Copyright (c) 2011 Sergio Rubio. See LICENSE.txt for
 further details.
 
+Test
