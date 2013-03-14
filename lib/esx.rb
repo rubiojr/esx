@@ -184,6 +184,7 @@ module ESX
       else
         gem_root = Gem::Specification.find_by_name("esx").gem_dir
         template_path = File.join(gem_root, 'templates', 'vmx_template.erb')
+        spec[:guest_id] = convert_guest_id_for_vmdk(spec[:guest_id])
         erb = ERB.new File.read(template_path)
         vmx = erb.result binding
         tmp_vmx = Tempfile.new 'vmx'
@@ -450,6 +451,15 @@ module ESX
       end
       spec[:fileOperation] = :create if disk_file.nil?
       spec
+    end
+
+    def convert_guest_id_for_vmdk(guest_id)
+      exceptions = {
+        "winLonghornGuest" => "longhorn",
+        "winLonghorn64Guest" => "longhorn-64",
+      }
+      return exceptions[guest_id] if exceptions[guest_id]
+      guest_id.downcase.gsub(/guest/, '').gsub(/_?64/, '-64')
     end
   end
 

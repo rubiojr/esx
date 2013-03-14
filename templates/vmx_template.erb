@@ -11,7 +11,7 @@ scsi0.virtualDev = "lsilogic"
 scsi0:0.present = "true"
 scsi0:0.fileName = "<%= spec[:disk_file].split("/").last %>"
 scsi0:0.deviceType = "scsi-hardDisk"
-guestOS = <%= spec[:guest_id] %>
+guestOS = "<%= spec[:guest_id] %>"
 floppy0.present = "FALSE"
 <% spec[:nics].each_with_index do |nic,index| %>
 ethernet<%= index %>.present = "true"
