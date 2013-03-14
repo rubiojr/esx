@@ -237,30 +237,26 @@ module ESX
 
     # Return a list of VM available in the inventory * recursive search of folders as well
     #
-	def virtual_machines
-	  puts @_datacenter.vmFolder.childEntity.count
-	  vms = []
-	  vm = @_datacenter.vmFolder
-	  vms = recursive_virtual_machine(vm,vms)
+  	def virtual_machines
+	    vms = []
+	    vm = @_datacenter.vmFolder
+  	  vms = recursive_virtual_machine(vm,vms)
 
-	  vms
-	end
+	    vms
+  	end
 
-	def recursive_virtual_machine(parentObject,array)
-		# puts "inside recursive_virtual_machine for object=[#{parentObject}], with childEntity.count=[#{parentObject.childEntity.count}]."
-		vm = parentObject.childEntity.each do |x|
-			if x.to_s.match("Folder") then
-				# begin
-					array = recursive_virtual_machine(x,array)
-				# rescue Exception => e
-					# puts e.message 
-				# end
-			else
-				array << VM.wrap(x,self)
-			end
-		end
-		return array
-	end
+	  def recursive_virtual_machine(parentObject,array)
+		  vm = parentObject.childEntity.each do |x|
+			  if x.to_s.match("Folder")
+			    array = recursive_virtual_machine(x,array)
+  			else
+	  			array << VM.wrap(x,self)
+		  	end
+  		end
+
+	  	array
+  	end
+    private :recursive_virtual_machine
 
     #
     # Run a command in the ESX host via SSH
