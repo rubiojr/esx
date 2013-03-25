@@ -4,6 +4,7 @@ require 'alchemist'
 require 'net/scp'
 require 'net/ssh'
 require 'erb'
+require 'tempfile'
 
 module ESX
 
@@ -41,7 +42,7 @@ module ESX
     #
     # Host connection is insecure by default
    def self.connect(host, user, password,  insecure = true, opts = {})
-      vim = RbVmomi::VIM.connect :host => host, :user => user, :password => password, :insecure => insecure
+      vim = RbVmomi::VIM.connect :host => host, :user => user, :password => password, :insecure => insecure, :rev => opts[:rev]||'4.0'
       host = Host.new(host, user,password, opts)
       host.vim = vim
       host
