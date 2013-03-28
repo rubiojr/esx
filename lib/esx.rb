@@ -194,6 +194,7 @@ module ESX
         ds = spec[:datastore]||'datastore1'
         ds = ds.gsub('[','').gsub(']','')
         vmx_path = "/vmfs/volumes/#{ds}/#{spec[:vm_name]}/#{spec[:vm_name]}.vmx"
+        remote_command "mkdir -p #{File.dirname(vmx_path)}"
         upload_file tmp_vmx.path, vmx_path
         remote_command "vim-cmd solo/registervm #{vmx_path}"
         VM.wrap(@_datacenter.find_vm(spec[:vm_name]),self)
