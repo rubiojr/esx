@@ -8,7 +8,7 @@ require 'tempfile'
 
 module ESX
 
-  VERSION = '0.4.2'
+  VERSION = '0.4.3'
 
   if !defined? Log or Log.nil?
     Log = Logger.new($stdout)
