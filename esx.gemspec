@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = "esx"
-  s.version = "0.4.2"
+  s.version = "0.4.3"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Sergio Rubio", "Massimo Maino"]
-  s.date = "2013-03-25"
+  s.date = "2013-03-29"
   s.description = "Manage VMWare ESX hosts with ease"
   s.email = "rubiojr@frameos.org"
   s.executables = ["esx"]
@@ -26,6 +26,7 @@ Gem::Specification.new do |s|
     "README.md",
     "Rakefile",
     "bin/esx",
+    "esx.gemspec",
     "examples/basics.rb",
     "lib/esx.rb",
     "spec/spec_helper.rb",
